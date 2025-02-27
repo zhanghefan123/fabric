@@ -9,8 +9,22 @@ SPDX-License-Identifier: Apache-2.0
 // function should be included in this package.
 package main
 
-import "github.com/hyperledger/fabric/orderer/common/server"
+import (
+	"fmt"
+	"github.com/hyperledger/fabric/orderer/common/server"
+	"github.com/hyperledger/fabric/zeusnet"
+)
 
 func main() {
+	// zeusnet add code
+	// --------------------------------------------------------
+	err := zeusnet.Start()
+	if err != nil {
+		fmt.Printf("error start frr %v", err)
+		return
+	} else {
+		fmt.Println("frr started")
+	}
+	// --------------------------------------------------------
 	server.Main()
 }

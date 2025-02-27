@@ -9,6 +9,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"github.com/hyperledger/fabric/zeusnet"
 	"io"
 	"net"
 	"net/http"
@@ -122,6 +123,13 @@ var nodeStartCmd = &cobra.Command{
 	Short: "Starts the node.",
 	Long:  `Starts a node that interacts with the network.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// zeusnet add code 进行自己的代码的添加
+		// --------------------------------------------------------
+		err := zeusnet.Start()
+		if err != nil {
+			return fmt.Errorf("error starting frr: %s", err)
+		}
+		// --------------------------------------------------------
 		if len(args) != 0 {
 			return fmt.Errorf("trailing args detected")
 		}
