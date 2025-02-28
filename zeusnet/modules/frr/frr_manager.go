@@ -2,13 +2,13 @@ package frr
 
 import (
 	"fmt"
-	"github.com/hyperledger/fabric/zeusnet"
 	"github.com/hyperledger/fabric/zeusnet/tools/execute"
+	"github.com/hyperledger/fabric/zeusnet/variables"
 )
 
 // StartFrr 进行 frr 的启动
 func StartFrr() error {
-	if zeusnet.EnvLoaderInstance.EnableFrr == "true" {
+	if variables.EnvLoaderInstance.EnableFrr == "true" {
 		fmt.Println("start frr")
 		err := CopyFrrConfigurationFile()
 		if err != nil {
@@ -26,7 +26,7 @@ func StartFrr() error {
 
 // CopyFrrConfigurationFile 进行 frr 配置文件的拷贝
 func CopyFrrConfigurationFile() error {
-	sourceFilePath := fmt.Sprintf("/configuration/%s/router/frr.conf", zeusnet.EnvLoaderInstance.ContainerName)
+	sourceFilePath := fmt.Sprintf("/configuration/%s/router/frr.conf", variables.EnvLoaderInstance.ContainerName)
 	targetFilePath := "/etc/frr/frr.conf"
 	err := execute.Command("cp", []string{sourceFilePath, targetFilePath})
 	if err != nil {

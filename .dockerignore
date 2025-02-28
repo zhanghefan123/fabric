@@ -15,7 +15,5 @@ release
 
 ci
 docs
-images
 release_notes
 vagrant
-go1.23.2.linux-amd64.tar.gz

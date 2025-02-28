@@ -2,12 +2,7 @@ package zeusnet
 
 import (
 	"fmt"
-	"github.com/hyperledger/fabric/zeusnet/modules/config"
 	"github.com/hyperledger/fabric/zeusnet/modules/frr"
-)
-
-var (
-	EnvLoaderInstance *config.EnvLoader
 )
 
 func Start() error {
