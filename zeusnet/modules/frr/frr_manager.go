@@ -26,7 +26,7 @@ func StartFrr() error {
 
 // CopyFrrConfigurationFile 进行 frr 配置文件的拷贝
 func CopyFrrConfigurationFile() error {
-	sourceFilePath := fmt.Sprintf("/configuration/%s/router/frr.conf", variables.EnvLoaderInstance.ContainerName)
+	sourceFilePath := fmt.Sprintf("/configuration/%s/route/frr.conf", variables.EnvLoaderInstance.ContainerName)
 	targetFilePath := "/etc/frr/frr.conf"
 	err := execute.Command("cp", []string{sourceFilePath, targetFilePath})
 	if err != nil {
