@@ -67,14 +67,18 @@ var (
 
 // Main is the entry point of orderer process
 func Main() {
+	// Parse command line arguments (kingpin 和 cobra 都是命令行解析工具)
 	fullCmd := kingpin.MustParse(app.Parse(os.Args[1:]))
 
-	// "version" command
+	// "version" command 如果是version命令，打印版本信息
 	if fullCmd == version.FullCommand() {
 		fmt.Println(metadata.GetVersionInfo())
 		return
 	}
 
+	// 如果不是version命令，那么就是start命令，执行start函数
+
+	// 进行配置的读取
 	conf, err := localconfig.Load()
 	if err != nil {
 		logger.Error("failed to parse config: ", err)
@@ -82,15 +86,20 @@ func Main() {
 	}
 	initializeLogging()
 
+	// 将配置进行打印
 	prettyPrintStruct(conf)
 
+	// 初始化加密提供者和签名者
+	// --------------------
 	cryptoProvider := factory.GetDefault()
-
 	signer, signErr := loadLocalMSP(conf).GetDefaultSigningIdentity()
 	if signErr != nil {
 		logger.Panicf("Failed to get local MSP identity: %s", signErr)
 	}
+	// --------------------
 
+	// 开启系统
+	// --------------------
 	opsSystem := newOperationsSystem(conf.Operations, conf.Metrics)
 	if err = opsSystem.Start(); err != nil {
 		logger.Panicf("failed to start operations subsystem: %s", err)
@@ -99,20 +108,33 @@ func Main() {
 	metricsProvider := opsSystem.Provider
 	logObserver := floggingmetrics.NewObserver(metricsProvider)
 	flogging.SetObserver(logObserver)
+	// --------------------
 
+	// 初始化 grpc server
+	// --------------------
 	serverConfig := initializeServerConfig(conf, metricsProvider)
 	grpcServer := initializeGrpcServer(conf, serverConfig)
+	// --------------------
+
+	// 初始化 CA 管理器
+	// --------------------
 	caMgr := &caManager{
 		appRootCAsByChain:     make(map[string][][]byte),
 		ordererRootCAsByChain: make(map[string][][]byte),
 		clientRootCAs:         serverConfig.SecOpts.ClientRootCAs,
 	}
+	// --------------------
 
+	// 创建账本工厂
+	// --------------------
 	lf, err := createLedgerFactory(conf, metricsProvider)
 	if err != nil {
 		logger.Panicf("Failed to create ledger factory: %v", err)
 	}
+	// --------------------
 
+	// 启动方式
+	// --------------------
 	switch conf.General.BootstrapMethod {
 	case "file":
 		logger.Panic("Bootstrap method: 'file' is forbidden, since system channel is no longer supported")
@@ -122,9 +144,12 @@ func Main() {
 	default:
 		logger.Panicf("Unknown bootstrap method: %s", conf.General.BootstrapMethod)
 	}
+	// --------------------
 
 	logger.Infof("Starting without a system channel")
 
+	// 设置集群
+	// --------------------
 	// configure following artifacts properly, always a cluster (e.g. Raft or BFT)
 	clusterServerConfig := serverConfig
 	clusterGRPCServer := grpcServer // by default, cluster shares the same grpc server
@@ -143,11 +168,14 @@ func Main() {
 	if !reuseGrpcListener {
 		clusterServerConfig, clusterGRPCServer = configureClusterListener(conf, serverConfig, os.ReadFile)
 	}
+	// --------------------
 
 	// If we have a separate gRPC server for the cluster,
 	// we need to update its TLS CA certificate pool.
 	serversToUpdate = append(serversToUpdate, clusterGRPCServer)
 
+	// 检测证明是否过期了
+	// --------------------
 	identityBytes, err := signer.Serialize()
 	if err != nil {
 		logger.Panicf("Failed serializing signing identity: %v", err)
@@ -163,6 +191,7 @@ func Main() {
 		expirationLogger.Warnf, // This can be used to piggyback a metric event in the future
 		time.Now(),
 		time.AfterFunc)
+	// --------------------
 
 	// if cluster is reusing client-facing server, then it is already
 	// appended to serversToUpdate at this point.

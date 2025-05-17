@@ -40,6 +40,7 @@ func main() {
 
 	cryptoProvider := factory.GetDefault()
 
+	// 在主命令之下添加了一些子命令
 	mainCmd.AddCommand(version.Cmd())
 	mainCmd.AddCommand(node.Cmd())
 	mainCmd.AddCommand(chaincode.Cmd(nil, cryptoProvider))
@@ -49,6 +50,7 @@ func main() {
 
 	// On failure Cobra prints the usage message and error string, so we only
 	// need to exit with a non-0 status
+	// 执行主命令, 如果执行失败的话
 	if mainCmd.Execute() != nil {
 		os.Exit(1)
 	}
