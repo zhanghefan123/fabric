@@ -54,9 +54,12 @@ func (gs *Server) Submit(ctx context.Context, request *gp.SubmitRequest) (*gp.Su
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "failed to create block deliverer for channel `%s`, missing OrdererConfig", request.ChannelId)
 	}
+	// zhf modified code
 	if oc.ConsensusType() == "BFT" {
+		fmt.Println("submit BFT")
 		return gs.submitBFT(ctx, orderers, txn, clusterSize, logger)
 	} else {
+		fmt.Println("submit non BFT")
 		return gs.submitNonBFT(ctx, orderers, txn, logger)
 	}
 }
@@ -80,6 +83,7 @@ loop:
 				if failures > total-quorum {
 					break loop
 				}
+				fmt.Println("submit BFT failure", osnErr)
 			} else {
 				successes++
 				if successes >= quorum {
@@ -102,7 +106,9 @@ func (gs *Server) broadcastToAll(orderers []*orderer, txn *common.Envelope, wait
 
 	broadcastContext, broadcastCancel := context.WithCancel(context.Background())
 	defer broadcastCancel()
+	// 进行每个 orderer 的遍历
 	for _, o := range orderers {
+		// 对于其中一个 orderer 如果卡住了会怎么办?
 		go func(ord *orderer) {
 			logger.Infow("Sending transaction to orderer", "endpoint", ord.logAddress)
 			ctx, cancel := context.WithCancel(broadcastContext)

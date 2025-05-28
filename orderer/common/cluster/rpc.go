@@ -8,6 +8,7 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -146,10 +147,12 @@ func (s *RPC) consensusSent(start time.Time, to uint64, msg *orderer.ConsensusRe
 
 // getOrCreateStream obtains a Submit stream for the given destination node
 func (s *RPC) getOrCreateStream(destination uint64, operationType OperationType) (*Stream, error) {
+	fmt.Printf("zhf add code: getOrCreateStream\n")
 	stream := s.getStream(destination, operationType)
 	if stream != nil {
 		return stream, nil
 	}
+	// 如果没有找到对应的 stream，则创建一个新的 stream
 	stub, err := s.Comm.Remote(s.Channel, destination)
 	if err != nil {
 		return nil, errors.WithStack(err)

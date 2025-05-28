@@ -298,13 +298,17 @@ func pemToDER(pemBytes []byte, id uint64, certType string, logger *flogging.Fabr
 }
 
 func (c *Consenter) detectSelfID(consenters []*cb.Consenter) (uint32, error) {
+	// 遍历通道配置之中的所有共识节点
 	for _, cst := range consenters {
+		// 对 X509 证书进行标准化处理
 		santizedCert, err := crypto.SanitizeX509Cert(cst.Identity)
 		if err != nil {
-			return 0, err
+			return 0, err // 如果证书处理失败则返回错误
 		}
+
+		// 比较当前节点的身份证书与遍历到的节点证书
 		if bytes.Equal(c.Comm.NodeIdentity, santizedCert) {
-			return cst.Id, nil
+			return cst.Id, nil // 找到匹配项, 返回该节点的 ID
 		}
 	}
 	c.Logger.Warning("Could not find the node in channel consenters set")

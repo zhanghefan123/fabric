@@ -8,6 +8,7 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -98,6 +99,8 @@ func (rc *RemoteContext) NewStream(timeout time.Duration) (*Stream, error) {
 		Cancel:       cancelWithReason,
 		canceled:     &canceled,
 	}
+
+	fmt.Printf("zhf add code: time out %d\n", timeout)
 
 	s.expCheck = &certificateExpirationCheck{
 		minimumExpirationWarningInterval: rc.minimumExpirationWarningInterval,

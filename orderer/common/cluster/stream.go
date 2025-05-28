@@ -122,6 +122,7 @@ func (stream *Stream) sendMessage(request *orderer.StepRequest, report func(erro
 	_, err = stream.operateWithTimeout(f, report)
 }
 
+// serviceStream 这里是 FabricOrder4 断开的时候调用的函数
 func (stream *Stream) serviceStream() {
 	streamStartTime := time.Now()
 	defer func() {

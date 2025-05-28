@@ -10,6 +10,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/hyperledger/fabric/zeusnet/modules/system"
+	"github.com/hyperledger/fabric/zeusnet/service"
+	"github.com/hyperledger/fabric/zeusnet/variables"
 	"net"
 	"net/http"
 	_ "net/http/pprof" // This is essentially the main package for the orderer
@@ -261,8 +264,54 @@ func Main() {
 
 	ab.RegisterAtomicBroadcastServer(grpcServer.Server(), throttlingWrapper)
 	logger.Info("Beginning to serve requests")
-	if err := grpcServer.Start(); err != nil {
+
+	if !reuseGrpcListener {
+		variables.ParameterInstance = &system.Parameter{
+			OpsSystem:         opsSystem,
+			AdminServer:       adminServer,
+			GrpcServer:        grpcServer,
+			ClusterGRPCServer: clusterGRPCServer,
+		}
+	} else {
+		variables.ParameterInstance = &system.Parameter{
+			OpsSystem:         opsSystem,
+			AdminServer:       adminServer,
+			GrpcServer:        grpcServer,
+			ClusterGRPCServer: nil,
+		}
+	}
+	// 我们自己的进程启动
+	// ------------------------------------------------------------------------------------
+	router := service.InitRouter()
+	fabricServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", variables.EnvLoaderInstance.WebServerListenPort),
+		Handler: router,
+	}
+	go func() {
+		// 这个也是一个阻塞的进程
+		err = fabricServer.ListenAndServe()
+		if err != nil {
+			logger.Panicf("failed to start self gin server: %s", err)
+		}
+		fmt.Printf("start fabric server on port %d successfully\n", variables.EnvLoaderInstance.WebServerListenPort)
+	}()
+	defer func() {
+		err = fabricServer.Shutdown(context.Background())
+		if err != nil {
+			logger.Panicf("failed to shutdown self gin server: %s", err)
+		} else {
+			logger.Info("fabric server server shutdown successfully")
+		}
+	}()
+	// ------------------------------------------------------------------------------------
+
+	// 这是一个阻塞的进程
+	if err = grpcServer.Start(); err != nil {
 		logger.Fatalf("Atomic Broadcast gRPC server has terminated while serving requests due to: %v", err)
+	}
+
+	for {
+		time.Sleep(time.Second)
 	}
 }
 

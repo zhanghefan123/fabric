@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package smartbft
 
 import (
+	"fmt"
 	protos "github.com/hyperledger-labs/SmartBFT/smartbftprotos"
 	ab "github.com/hyperledger/fabric-protos-go-apiv2/orderer"
 	"github.com/hyperledger/fabric/protoutil"
@@ -52,6 +53,7 @@ func (in *Ingress) OnConsensus(channel string, sender uint64, request *ab.Consen
 		in.Logger.Warningf("Malformed message: %v", err)
 		return errors.Wrap(err, "malformed message")
 	}
+	fmt.Printf("zhf add code: receive message from sender: %d with %s\n", sender, msg.String())
 	receiver.HandleMessage(sender, msg)
 	return nil
 }

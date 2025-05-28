@@ -11,9 +11,12 @@ import (
 
 func Start() error {
 	// 1. 进行配置文件的加载
-	variables.EnvLoaderInstance.LoadEnv()
+	err := variables.EnvLoaderInstance.LoadEnv()
+	if err != nil {
+		return fmt.Errorf("load env error: %v", err)
+	}
 	fmt.Println(variables.EnvLoaderInstance.FirstInterfaceName, variables.EnvLoaderInstance.FirstInterfaceAddr)
-	err := network.SleepUntilInterfaceUp(variables.EnvLoaderInstance.FirstInterfaceName, variables.EnvLoaderInstance.FirstInterfaceAddr)
+	err = network.SleepUntilInterfaceUp(variables.EnvLoaderInstance.FirstInterfaceName, variables.EnvLoaderInstance.FirstInterfaceAddr)
 	if err != nil {
 		return fmt.Errorf("return until interface up error: %v", err)
 	}

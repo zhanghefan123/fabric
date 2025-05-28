@@ -7,7 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package smartbft
 
 import (
+	"fmt"
+	"runtime/debug"
 	"sync/atomic"
+	"time"
 
 	"github.com/hyperledger-labs/SmartBFT/pkg/api"
 	protos "github.com/hyperledger-labs/SmartBFT/smartbftprotos"
@@ -60,9 +63,18 @@ func (e *Egress) Nodes() []uint64 {
 
 // SendConsensus sends the BFT message to the cluster
 func (e *Egress) SendConsensus(targetID uint64, m *protos.Message) {
+	startTime := time.Now()
 	err := e.RPC.SendConsensus(targetID, bftMsgToClusterMsg(m, e.Channel))
+	endTime := time.Now()
+	diff := endTime.Sub(startTime)
 	if err != nil {
-		e.Logger.Warnf("Failed sending to %d: %v", targetID, err)
+		// zhf add code 进行调用栈的打印
+		debug.PrintStack()
+		e.Logger.Warnf("Failed sending to %d, which takes %f seconds to time out: %v", targetID, diff.Seconds(), err)
+		// zhf add code 进行调用栈的打印
+		fmt.Printf("zhf add code: sendConsensusError to target %d with %s \n", targetID, m.String())
+	} else {
+		fmt.Printf("zhf add code: sendConsensusSuccess to target %d with %s \n", targetID, m.String())
 	}
 }
 

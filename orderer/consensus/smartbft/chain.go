@@ -9,6 +9,9 @@ package smartbft
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/hyperledger/fabric/zeusnet/tools/file"
+	"github.com/hyperledger/fabric/zeusnet/variables"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"sync"
@@ -344,6 +347,10 @@ func (c *BFTChain) Order(env *cb.Envelope, configSeq uint64) error {
 // discarding the message if the reconfiguration is no longer valid.
 // The consenter may return an error, indicating the message was not accepted
 func (c *BFTChain) Configure(config *cb.Envelope, configSeq uint64) error {
+	// zhf add code
+	// ----------------------------------
+	fmt.Println("configure called") // 这个只在一开始的时候被调用, 后面就不会进行调用了。
+	// ----------------------------------
 	if err := c.verifier.ConfigValidator.ValidateConfig(config); err != nil {
 		return err
 	}
@@ -453,10 +460,32 @@ func (c *BFTChain) Errored() <-chan struct{} {
 // Typically, this involves creating a thread which reads from the ordering source, passes those
 // messages to a block cutter, and writes the resulting blocks to the ledger.
 func (c *BFTChain) Start() {
-	if err := c.consensus.Start(); err != nil {
+	// zhf add code
+	// --------------------------------------------------
+	err := c.WriteCurrentNodeId()
+	if err != nil {
+		c.Logger.Panicf("Failed to write node id to file: %v", err)
+	}
+	// --------------------------------------------------
+	if err = c.consensus.Start(); err != nil {
 		c.Logger.Panicf("Failed to start chain, aborting: %+v", err)
 	}
 	c.reportIsLeader() // report the leader
+}
+
+// WriteCurrentNodeId writes the current node id to the configuration/nodeId.txt.
+func (c *BFTChain) WriteCurrentNodeId() error {
+	envLoader := variables.EnvLoaderInstance
+	go func() {
+		outputFilePath := filepath.Join("/configuration", fmt.Sprintf("%s/%s", envLoader.ContainerName, "nodeId.txt"))
+		for {
+			finalString := fmt.Sprintf("current_node_id: %d\n", c.Config.SelfID)
+			finalString += fmt.Sprintf("current_leader_id: %d\n", c.GetLeaderID())
+			_ = file.WriteStringIntoFile(outputFilePath, finalString)
+			time.Sleep(time.Second)
+		}
+	}()
+	return nil
 }
 
 // Halt frees the resources which were allocated for this Chain.
