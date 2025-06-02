@@ -270,9 +270,18 @@ func newClientStreamWithParams(ctx context.Context, desc *StreamDesc, cc *Client
 	var cancel context.CancelFunc
 	if mc.Timeout != nil && *mc.Timeout >= 0 {
 		ctx, cancel = context.WithTimeout(ctx, *mc.Timeout)
+		// 带有超时机制的
+		fmt.Printf("zhf add code: ctx, cancel = context.WithTimeout(ctx, *mc.Timeout) = %v\n", mc.Timeout)
 	} else {
 		ctx, cancel = context.WithCancel(ctx)
+		fmt.Println("ctx, cancel = context.WithTimeout(ctx, *mc.Timeout)")
 	}
+
+	// zhf add code
+	// ------------------------------------------------------------------------
+	// ctx, cancel = context.WithTimeout(context.Background(), time.Millisecond*10)
+	// ------------------------------------------------------------------------
+
 	defer func() {
 		if err != nil {
 			cancel()
@@ -466,17 +475,23 @@ func (a *csAttempt) getTransport() error {
 	cs := a.cs
 
 	var err error
-	a.t, a.pickResult, err = cs.cc.getTransport(a.ctx, cs.callInfo.failFast, cs.callHdr.Method)
+
+	// zhf add code
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)             // zhf add code
+	a.t, a.pickResult, err = cs.cc.getTransport(ctx, cs.callInfo.failFast, cs.callHdr.Method) // zhf add code
+	// a.t, a.pickResult, err = cs.cc.getTransport(a.ctx, cs.callInfo.failFast, cs.callHdr.Method) // modified code
 	if err != nil {
 		if de, ok := err.(dropError); ok {
 			err = de.error
 			a.drop = true
 		}
+		cancel() // zhf add code
 		return err
 	}
 	if a.trInfo != nil {
 		a.trInfo.firstLine.SetRemoteAddr(a.t.RemoteAddr())
 	}
+	cancel() // zhf add code
 	return nil
 }
 

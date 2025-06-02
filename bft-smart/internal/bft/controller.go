@@ -920,7 +920,9 @@ func (c *Controller) BroadcastConsensus(m *protos.Message) {
 			continue
 		}
 		// 发送的 m 是心跳消息
-		c.Comm.SendConsensus(node, m)
+		go func() {
+			c.Comm.SendConsensus(node, m)
+		}()
 	}
 	// 如果消息是 PrePrepare, Prepare, Commit, 心跳消息显然不是
 	if m.GetPrePrepare() != nil || m.GetPrepare() != nil || m.GetCommit() != nil {

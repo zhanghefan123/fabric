@@ -21,9 +21,6 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"io"
-	"sync/atomic"
-
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/internal/channelz"
@@ -31,6 +28,8 @@ import (
 	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
+	"io"
+	"sync/atomic"
 )
 
 // pickerGeneration stores a picker and a channel used to signal that a picker
@@ -172,6 +171,7 @@ func (pw *pickerWrapper) pick(ctx context.Context, failfast bool, info balancer.
 				lastPickErr = err
 				continue
 			}
+			// 当超时之后, 从这里进行返回
 			return nil, balancer.PickResult{}, status.Error(codes.Unavailable, err.Error())
 		}
 
