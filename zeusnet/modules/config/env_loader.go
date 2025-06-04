@@ -12,6 +12,7 @@ type EnvLoader struct {
 	FirstInterfaceName  string
 	FirstInterfaceAddr  string
 	WebServerListenPort int
+	EnableRoutine       bool
 }
 
 // LoadEnv 进行环境变量的加载
@@ -25,5 +26,9 @@ func (envLoader *EnvLoader) LoadEnv() error {
 		return fmt.Errorf("parse WEB_SERVER_LISTEN_PORT error: %v", err)
 	}
 	envLoader.WebServerListenPort = int(webServerListenPort)
+	envLoader.EnableRoutine, err = strconv.ParseBool(os.Getenv("ENABLE_ROUTINE"))
+	if err != nil {
+		return fmt.Errorf("parse ENABLE_ROUTINE error %v", err)
+	}
 	return nil
 }

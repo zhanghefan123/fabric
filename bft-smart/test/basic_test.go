@@ -1427,7 +1427,7 @@ func TestGradualStart(t *testing.T) {
 	// start with only one node
 	n0 := newNode(uint64(1), network, t.Name(), testDir, true, 1)
 
-	if err := n0.Consensus.Start(); err != nil {
+	if err := n0.Consensus.Start(false); err != nil {
 		n0.logger.Panicf("Consensus returned an error : %v", err)
 	}
 	network.StartServe()
@@ -1449,7 +1449,7 @@ func TestGradualStart(t *testing.T) {
 	n1 := newNode(uint64(2), network, t.Name(), testDir, true, 1)
 	atomic.AddUint64(&n1.verificationSeq, 1)
 
-	if err := n1.Consensus.Start(); err != nil {
+	if err := n1.Consensus.Start(false); err != nil {
 		n1.logger.Panicf("Consensus returned an error : %v", err)
 	}
 
@@ -1481,7 +1481,7 @@ func TestGradualStart(t *testing.T) {
 	n2 := newNode(uint64(3), network, t.Name(), testDir, true, 1)
 	atomic.AddUint64(&n2.verificationSeq, 2)
 
-	if err := n2.Consensus.Start(); err != nil {
+	if err := n2.Consensus.Start(false); err != nil {
 		n2.logger.Panicf("Consensus returned an error : %v", err)
 	}
 
@@ -3377,7 +3377,7 @@ func accelerateTime(nodes []*App, done chan struct{}, heartbeatTime, viewChangeT
 
 func startNodes(nodes []*App, network *Network) {
 	for _, n := range nodes {
-		if err := n.Consensus.Start(); err != nil {
+		if err := n.Consensus.Start(false); err != nil {
 			n.logger.Panicf("Consensus returned an error : %v", err)
 		}
 	}

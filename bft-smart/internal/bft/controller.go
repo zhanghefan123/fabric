@@ -116,6 +116,9 @@ type Controller struct {
 	MetricsView        *api.MetricsView
 	quorum             int
 
+	NodeMessageLimiter map[uint64]chan struct{} // zhf add code
+	EnableRoutine      bool                     // zhf add code
+
 	currView Proposer
 
 	currViewLock   sync.RWMutex
@@ -913,17 +916,39 @@ type decision struct {
 
 // BroadcastConsensus broadcasts the message and informs the heartbeat monitor if necessary
 func (c *Controller) BroadcastConsensus(m *protos.Message) {
-	// 遍历所有的节点, 除了自己进行共识消息的发送
-	for _, node := range c.NodesList {
-		// Do not send to yourself
-		if c.ID == node {
-			continue
+	//defer func(startTime time.Time) {
+	//	timeDuration := time.Since(startTime)
+	//	if timeDuration > time.Second {
+	//		fmt.Printf("broadcast consensus takes %v\n to finish\n", timeDuration)
+	//	}
+	//}(time.Now())
+	if c.EnableRoutine {
+		for _, node := range c.NodesList {
+			if c.ID == node {
+				continue
+			}
+			go c.Comm.SendConsensus(node, m)
 		}
-		// 发送的 m 是心跳消息
-		go func() {
+	} else {
+		for _, node := range c.NodesList {
+			if c.ID == node {
+				continue
+			}
 			c.Comm.SendConsensus(node, m)
-		}()
+		}
 	}
+
+	//select {
+	//case c.NodeMessageLimiter[node] <- struct{}{}: // 获取令牌
+	//	go func(nodeId uint64) {
+	//		defer func() { <-c.NodeMessageLimiter[node] }() // 释放令牌
+	//		c.Comm.SendConsensus(nodeId, m)
+	//	}(node)
+	//default:
+	//	// 如果进入到了这个 case 也不会阻碍后续的 broadcastConsensus 的执行
+	//	fmt.Println("zhf: concurrency limit exceeded (50)")
+	//}
+
 	// 如果消息是 PrePrepare, Prepare, Commit, 心跳消息显然不是
 	if m.GetPrePrepare() != nil || m.GetPrepare() != nil || m.GetCommit() != nil {
 		if leader, _ := c.iAmTheLeader(); leader {

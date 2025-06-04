@@ -358,6 +358,7 @@ func newClientStreamWithParams(ctx context.Context, desc *StreamDesc, cc *Client
 	// Pick the transport to use and create a new stream on the transport.
 	// Assign cs.attempt upon success.
 	op := func(a *csAttempt) error {
+		// getTransport 返回的是 EOF
 		if err := a.getTransport(); err != nil {
 			return err
 		}
@@ -477,21 +478,21 @@ func (a *csAttempt) getTransport() error {
 	var err error
 
 	// zhf add code
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)             // zhf add code
-	a.t, a.pickResult, err = cs.cc.getTransport(ctx, cs.callInfo.failFast, cs.callHdr.Method) // zhf add code
+	// ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)             // zhf add code
+	a.t, a.pickResult, err = cs.cc.getTransport(a.ctx, cs.callInfo.failFast, cs.callHdr.Method) // zhf add code
 	// a.t, a.pickResult, err = cs.cc.getTransport(a.ctx, cs.callInfo.failFast, cs.callHdr.Method) // modified code
 	if err != nil {
 		if de, ok := err.(dropError); ok {
 			err = de.error
 			a.drop = true
 		}
-		cancel() // zhf add code
+		// cancel() // zhf add code
 		return err
 	}
 	if a.trInfo != nil {
 		a.trInfo.firstLine.SetRemoteAddr(a.t.RemoteAddr())
 	}
-	cancel() // zhf add code
+	// cancel() // zhf add code
 	return nil
 }
 

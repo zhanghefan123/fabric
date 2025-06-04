@@ -49,7 +49,6 @@ func (rc *RemoteContext) NewStream(timeout time.Duration) (*Stream, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.TODO()) // original code
-	//ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10) // zhf add code
 	stream, err := rc.GetStreamFunc(ctx)
 	if err != nil {
 		cancel()

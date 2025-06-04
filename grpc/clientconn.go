@@ -1260,6 +1260,7 @@ func (ac *addrConn) resetTransportAndUnlock() {
 		}
 		// After exhausting all addresses, the addrConn enters
 		// TRANSIENT_FAILURE.
+		// 穷尽所有的可能地址后, addrConn 进入 TRANSIENT_FAILURE 状态
 		ac.updateConnectivityState(connectivity.TransientFailure, err)
 
 		// Backoff.

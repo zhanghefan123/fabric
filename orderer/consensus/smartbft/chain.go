@@ -467,7 +467,7 @@ func (c *BFTChain) Start() {
 		c.Logger.Panicf("Failed to write node id to file: %v", err)
 	}
 	// --------------------------------------------------
-	if err = c.consensus.Start(); err != nil {
+	if err = c.consensus.Start(variables.EnvLoaderInstance.EnableRoutine); err != nil {
 		c.Logger.Panicf("Failed to start chain, aborting: %+v", err)
 	}
 	c.reportIsLeader() // report the leader

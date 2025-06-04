@@ -137,7 +137,7 @@ func (a *App) RestartSync(sync bool) {
 	defer a.Node.Unlock()
 	a.Setup()
 	a.Consensus.Config.SyncOnStart = sync
-	if err := a.Consensus.Start(); err != nil {
+	if err := a.Consensus.Start(false); err != nil {
 		a.logger.Panicf("Consensus start returned an error : %v", err)
 	}
 }

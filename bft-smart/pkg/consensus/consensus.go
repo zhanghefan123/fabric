@@ -105,7 +105,7 @@ func (c *Consensus) GetLeaderID() uint64 {
 	return c.controller.GetLeaderID()
 }
 
-func (c *Consensus) Start() error {
+func (c *Consensus) Start(enableRoutine bool) error {
 	if err := c.ValidateConfiguration(c.Comm.Nodes()); err != nil {
 		return fmt.Errorf("configuration is invalid: %w", err)
 	}
@@ -136,7 +136,7 @@ func (c *Consensus) Start() error {
 	c.checkpoint = &types.Checkpoint{}
 	c.checkpoint.Set(c.LastProposal, c.LastSignatures)
 
-	c.createComponents()
+	c.createComponents(enableRoutine)
 	opts := algorithm.PoolOptions{
 		QueueSize:         int64(c.Config.RequestPoolSize),
 		ForwardTimeout:    c.Config.RequestForwardTimeout,
@@ -221,7 +221,7 @@ func (c *Consensus) reconfig(reconfig types.Reconfig) {
 	c.setNodes(reconfig.CurrentNodes)
 	c.initMetricsBlacklistReconfigure(old)
 
-	c.createComponents()
+	c.createComponents(false)
 	opts := algorithm.PoolOptions{
 		ForwardTimeout:    c.Config.RequestForwardTimeout,
 		ComplainTimeout:   c.Config.RequestComplainTimeout,
@@ -384,7 +384,7 @@ func sortNodes(nodes []uint64) []uint64 {
 	return sorted
 }
 
-func (c *Consensus) createComponents() {
+func (c *Consensus) createComponents(enableRoutine bool) {
 	c.viewChanger = &algorithm.ViewChanger{
 		SelfID:             c.Config.SelfID,
 		N:                  c.numberOfNodes,
@@ -439,7 +439,17 @@ func (c *Consensus) createComponents() {
 		State:              c.state,
 		InFlight:           c.inFlight,
 		MetricsView:        c.Metrics.MetricsView,
+
+		// zhf add code
+		NodeMessageLimiter: map[uint64]chan struct{}{},
+		EnableRoutine:      enableRoutine,
 	}
+
+	// zhf add code
+	for _, node := range c.nodes {
+		c.controller.NodeMessageLimiter[node] = make(chan struct{}, 50)
+	}
+
 	c.controller.Deliver = &algorithm.MutuallyExclusiveDeliver{C: c.controller}
 
 	c.viewChanger.Application = &algorithm.MutuallyExclusiveDeliver{C: c.controller}
