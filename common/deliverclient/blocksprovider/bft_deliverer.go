@@ -163,11 +163,14 @@ func (d *BFTDeliverer) DeliverBlocks() {
 		// The backoff duration is doubled with every failed round.
 		// A failed round is when we had moved through all the endpoints without success.
 		// If we get a block successfully from a source, or endpoints are refreshed, the failure count is reset.
+		// 计算退避时间并等待重试, 每次失败，退避持续时间都会加倍,失败的回合是指我们遍历所有端点但都没有成功, 如果我们成功的从源获取一个块
+		// 那么失败计数将被重置
 		if stopLoop := d.retryBackoff(); stopLoop {
 			break
 		}
 
 		// No endpoints is a non-recoverable error, as new endpoints are a result of fetching new blocks from an orderer.
+		// 没有可供拉取区块的节点
 		if len(d.fetchSources) == 0 {
 			d.Logger.Error("Failure in DeliverBlocks, no orderer endpoints, something is critically wrong")
 			break
@@ -176,7 +179,9 @@ func (d *BFTDeliverer) DeliverBlocks() {
 		// Start a block fetcher; a buffered channel so that the fetcher goroutine can send an error and exit w/o
 		// waiting for it to be consumed. A block receiver is created within.
 		d.fetchErrorsC = make(chan error, 1)
+		// 取一个源
 		source := d.fetchSources[d.fetchSourceIndex]
+		// 进行区块的拉取
 		go d.FetchBlocks(source)
 
 		// Create and start a censorship monitor.
@@ -202,11 +207,13 @@ func (d *BFTDeliverer) DeliverBlocks() {
 	}
 }
 
+// initDeliverBlocks 进行区块拉取模式的初始化
 func (d *BFTDeliverer) initDeliverBlocks() (err error) {
 	d.mutex.Lock()
 	defer d.mutex.Unlock()
 
 	d.lastBlockTime = time.Now()
+	// 将当前高度存储在 nextBlockNumber 表示下一个要处理的区块号
 	d.nextBlockNumber, err = d.Ledger.LedgerHeight()
 	if err != nil {
 		d.Logger.Errorf("Did not return ledger height, something is critically wrong: %s", err)
@@ -307,6 +314,7 @@ func (d *BFTDeliverer) handleFetchAndCensorshipEvents() (stopLoop bool) {
 
 func (d *BFTDeliverer) refreshSources() {
 	// select an initial source randomly
+	// 将验证器序列进行打乱
 	d.fetchSources = d.orderers.ShuffledEndpoints()
 	d.Logger.Infof("Refreshed endpoints: %s", d.fetchSources)
 	d.fetchSourceIndex = 0
@@ -337,13 +345,14 @@ func (d *BFTDeliverer) FetchBlocks(source *orderers.Endpoint) {
 		default:
 		}
 
+		// 生成一个签名的 SeekInfo 信封，请求来自某个区块编号的区块流(区块流指的是很多的区块)。
 		seekInfoEnv, err := d.requester.SeekInfoBlocksFrom(d.getNextBlockNumber())
 		if err != nil {
 			d.Logger.Errorf("Could not create a signed Deliver SeekInfo message, something is critically wrong: %s", err)
 			d.fetchErrorsC <- &ErrFatal{Message: fmt.Sprintf("could not create a signed Deliver SeekInfo message: %s", err)}
 			return
 		}
-
+		// 连接到要请求的源，请求进行发送
 		deliverClient, cancel, err := d.requester.Connect(seekInfoEnv, source)
 		if err != nil {
 			d.Logger.Warningf("Could not connect to ordering service: %s", err)
@@ -383,7 +392,6 @@ func (d *BFTDeliverer) FetchBlocks(source *orderers.Endpoint) {
 				d.Logger.Warningf("Failure while processing incoming blocks: %s", errProc)
 				d.fetchErrorsC <- errProc
 			}
-
 			return
 		}
 	}

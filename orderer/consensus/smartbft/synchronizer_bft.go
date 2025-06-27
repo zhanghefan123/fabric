@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package smartbft
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -86,19 +87,26 @@ func (s *BFTSynchronizer) Buffer() *SyncBuffer {
 }
 
 func (s *BFTSynchronizer) synchronize() (*types.Decision, error) {
+	fmt.Println("zhf add code: synchronize")
+
 	// === We probe all the endpoints and establish a target height, as well as detect the self endpoint.
 	targetHeight, myEndpoint, err := s.detectTargetHeight()
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot get detect target height")
 	}
 
+	// 获取当前的高度
 	startHeight := s.Support.Height()
+	// 如果当前的高度 >= 其他节点告知的高度
 	if startHeight >= targetHeight {
+		// 返回错误
 		return nil, errors.Errorf("already at target height of %d", targetHeight)
 	}
 
 	// === Create a buffer to accept the blocks delivered from the BFTDeliverer.
+	// 计算能够存储的最大的能够缓存的区块的数量
 	capacityBlocks := uint(s.LocalConfigCluster.ReplicationBufferSize) / uint(s.Support.SharedConfig().BatchSize().AbsoluteMaxBytes)
+	// 如果能够缓存的区块数量 < 100, 那么至少设置为 100
 	if capacityBlocks < 100 {
 		capacityBlocks = 100
 	}
@@ -107,6 +115,7 @@ func (s *BFTSynchronizer) synchronize() (*types.Decision, error) {
 	s.mutex.Unlock()
 
 	// === Create the BFT block deliverer and start a go-routine that fetches block and inserts them into the syncBuffer.
+	// 创建 BFT block deliver 并且启动一个 goroutine 来将获取到的 blocks 放到  syncBuffer 之中
 	bftDeliverer, err := s.createBFTDeliverer(startHeight, myEndpoint)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot create BFT block deliverer")
@@ -121,6 +130,7 @@ func (s *BFTSynchronizer) synchronize() (*types.Decision, error) {
 		return nil, errors.Wrapf(err, "failed to get any blocks from SyncBuffer")
 	}
 
+	// 拿到最后一个同步过来的区块
 	decision := s.BlockToDecision(lastPulledBlock)
 	s.Logger.Infof("Returning decision from block [%d], decision: %+v", lastPulledBlock.GetHeader().GetNumber(), decision)
 	return decision, nil
@@ -139,6 +149,7 @@ func (s *BFTSynchronizer) detectTargetHeight() (uint64, string, error) {
 	}
 	defer blockPuller.Close()
 
+	// 拿到各个验证者的 height
 	heightByEndpoint, myEndpoint, err := blockPuller.HeightsByEndpoints()
 	if err != nil {
 		return 0, "", errors.Wrap(err, "cannot get HeightsByEndpoints")
@@ -156,28 +167,33 @@ func (s *BFTSynchronizer) detectTargetHeight() (uint64, string, error) {
 		return 0, "", errors.New("no cluster members to synchronize with")
 	}
 
+	// 计算拿到的正确的高度
 	targetHeight := s.computeTargetHeight(heights)
 	s.Logger.Infof("Detected target height: %d", targetHeight)
 	return targetHeight, myEndpoint, nil
 }
 
 // computeTargetHeight compute the target height to synchronize to.
-//
 // heights: a slice containing the heights of accessible peers, length must be >0.
 // clusterSize: the cluster size, must be >0.
 func (s *BFTSynchronizer) computeTargetHeight(heights []uint64) uint64 {
+	// 将区块按照降序进行排列
 	sort.Slice(heights, func(i, j int) bool { return heights[i] > heights[j] }) // Descending
+	// 获取集群的大小
 	clusterSize := len(s.Support.SharedConfig().Consenters())
+	// 获取容忍的拜占庭节点的数量
 	f := uint64(clusterSize-1) / 3 // The number of tolerated byzantine faults
 	lenH := uint64(len(heights))
 
 	s.Logger.Debugf("Cluster size: %d, F: %d, Heights: %v", clusterSize, f, heights)
 
+	// 如果高度数量不足 (f+1), 返回最小的那个高度
 	if lenH < f+1 {
 		s.Logger.Debugf("Returning %d", heights[0])
 		return heights[int(lenH)-1]
 	}
 	s.Logger.Debugf("Returning %d", heights[f])
+	// 如果高度足 f + 1, 那么选择第 f + 1 个高度，可以确保至少有 f+1 个节点报告了该高度或更高高度
 	return heights[f]
 }
 
@@ -249,15 +265,18 @@ func (s *BFTSynchronizer) getBlocksFromSyncBuffer(startHeight, targetHeight uint
 
 	var lastPulledBlock *common.Block
 	for seq <= targetSeq {
+		// 从 syncBuffer 之中取出区块
 		block := s.syncBuff.PullBlock(seq)
 		if block == nil {
 			s.Logger.Debugf("Failed to fetch block [%d] from cluster", seq)
 			break
 		}
+		// 如果是配置块
 		if protoutil.IsConfigBlock(block) {
 			s.Support.WriteConfigBlock(block, nil)
 			s.Logger.Debugf("Fetched and committed config block [%d] from cluster", seq)
 		} else {
+			// 将区块写入到账本之中, 因为网络分区原因, 最后同步过来的账本验证完成后直接写入
 			s.Support.WriteBlock(block, nil)
 			s.Logger.Debugf("Fetched and committed block [%d] from cluster", seq)
 		}

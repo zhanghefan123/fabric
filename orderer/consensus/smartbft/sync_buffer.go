@@ -19,6 +19,7 @@ type SyncBuffer struct {
 	stopOnce sync.Once
 }
 
+// NewSyncBuffer 创建同步的缓存 (capacity 就是 channel 的容量)
 func NewSyncBuffer(capacity uint) *SyncBuffer {
 	if capacity == 0 {
 		capacity = 10

@@ -126,6 +126,7 @@ type View struct {
 // Start starts the view
 func (v *View) Start() {
 	v.stopOnce = sync.Once{}
+	// incomingMsgs 最多 v.InMsgQSize 的大小
 	v.incMsgs = make(chan *incMsg, v.InMsgQSize)
 	v.abortChan = make(chan struct{})
 	v.lastVotedProposalByID = make(map[uint64]*protos.Commit)
@@ -188,12 +189,14 @@ func (v *View) HandleMessage(sender uint64, m *protos.Message) {
 	case <-v.abortChan:
 		fmt.Printf("zhf add code: abortChan received message\n")
 		return
-	case v.incMsgs <- msg:
+	// 全是向 incMsgs 之中塞入内容
+	case v.incMsgs <- msg: // incMsgs 的长度为 200
 		fmt.Printf("zhf add code: v.incMsgs received message current length %d with capacity %d\n", len(v.incMsgs), cap(v.incMsgs))
 	}
 }
 
 func (v *View) processMsg(sender uint64, m *protos.Message) {
+	// 如果停止了直接返回
 	if v.Stopped() {
 		return
 	}
@@ -201,14 +204,18 @@ func (v *View) processMsg(sender uint64, m *protos.Message) {
 	msgViewNum := viewNumber(m)
 	msgProposalSeq := proposalSequence(m)
 
+	// 消息的视图编号和当前的视图编号不一致
 	if msgViewNum != v.Number {
+		// 打印期望的视图编号和实际的视图编号
 		v.Logger.Warnf("%d got message %v from %d of view %d, expected view %d", v.SelfID, m, sender, msgViewNum, v.Number)
+		// 如果发送方不为 leader, 看看是否需要进行 sync
 		if sender != v.LeaderID {
 			v.discoverIfSyncNeeded(sender, m)
 			return
 		}
 		v.FailureDetector.Complain(v.Number, false)
 		// Else, we got a message with a wrong view from the leader.
+		// 如果从 leader 处拿到了错误的 view 消息,
 		if msgViewNum > v.Number {
 			v.Sync.Sync()
 		}
@@ -275,6 +282,7 @@ func (v *View) run() {
 			return
 		case msg := <-v.incMsgs:
 			fmt.Printf("zhf add code: process incoming message in run\n")
+			// 进行投票信息的记录的函数
 			v.processMsg(msg.sender, msg.Message)
 		default:
 			v.doPhase()
@@ -447,11 +455,14 @@ func (v *View) processPrepares() Phase {
 	expectedDigest := proposal.Digest()
 
 	var voterIDs []uint64
+	// zhf add code: 当没有达到 quorum 的时候, 就一直处于循环的状态
 	for len(voterIDs) < v.Quorum-1 {
 		select {
+		// zhf add code: 没有 default 分支, 所以会等到至少一个 case 可读的情况
 		case <-v.abortChan:
 			return ABORT
-		case msg := <-v.incMsgs: // incMsgs 代表的是进入消息
+		// 准备进行消息的处理
+		case msg := <-v.incMsgs: // zhf add code: incMsgs 代表的是进入消息, 假设一直都是别的消息的话, 那么就始终收不到正常投票的消息, 而全是已经透过票的人的消息
 			fmt.Printf("zhf add code: process incoming message from %d, with %s\n", msg.sender, msg.String())
 			v.processMsg(msg.sender, msg.Message)
 		case vote := <-v.prepares.votes: // prepares.votes 代表的是准备投票
@@ -488,6 +499,7 @@ func (v *View) processPrepares() Phase {
 
 	seq := v.ProposalSequence
 
+	// 构造 commit 消息进行发送
 	commitMsg := &protos.Message{
 		Content: &protos.Message_Commit{
 			Commit: &protos.Commit{
@@ -516,6 +528,7 @@ func (v *View) processPrepares() Phase {
 	}
 	v.currCommitSent = proto.Clone(commitMsg).(*protos.Message)
 	v.currCommitSent.GetCommit().Assist = true
+	// zhf add code: lastBroadcastSent 阶段切换的时候要发送的消息
 	v.lastBroadcastSent = commitMsg
 
 	v.Logger.Infof("Processed prepares for proposal with seq %d", seq)
@@ -762,6 +775,8 @@ func (v *View) handlePrevSeqMessage(msgProposalSeq, sender uint64, m *protos.Mes
 	v.Logger.Debugf("Got %s for previous sequence (%d) from %d, %s", msgType, msgProposalSeq, sender, prevMsgFound)
 }
 
+// discoverIfSyncNeeded zhf add code: 收到非 leader 的消息并且其视图编号比自己大的时候, 判断是否需要进行同步
+// 典型场景: 重启的 follower 收到最新的 Commit，发现自己缺失数据，触发同步。
 func (v *View) discoverIfSyncNeeded(sender uint64, m *protos.Message) {
 	// We're only interested in commit messages.
 	commit := m.GetCommit()
@@ -775,8 +790,8 @@ func (v *View) discoverIfSyncNeeded(sender uint64, m *protos.Message) {
 	// In each such a threshold of f+1 votes there is at least
 	// a single honest node that prepared for a proposal
 	// which we apparently missed.
-	_, f := computeQuorum(v.N)
-	threshold := f + 1
+	_, f := computeQuorum(v.N) // 计算 f
+	threshold := f + 1         // 收到 f+1 确保有一个诚实节点支持 commit
 
 	v.lastVotedProposalByID[sender] = commit
 
@@ -784,6 +799,7 @@ func (v *View) discoverIfSyncNeeded(sender uint64, m *protos.Message) {
 		commit.Seq, commit.View, sender, v.ProposalSequence, v.Number)
 
 	// If we haven't reached a threshold of proposals yet, abort.
+	// 如果还没达到 threashold 丢弃
 	if len(v.lastVotedProposalByID) < threshold {
 		return
 	}
@@ -819,6 +835,7 @@ func (v *View) discoverIfSyncNeeded(sender uint64, m *protos.Message) {
 		v.Logger.Warnf("Seen %d votes for digest %s in view %d, sequence %d but I am in view %d and seq %d",
 			count, vote.digest, vote.view, vote.seq, v.Number, v.ProposalSequence)
 		v.stop()
+		// 如果自己真的落后, 那么进行同步
 		v.Sync.Sync()
 		return
 	}

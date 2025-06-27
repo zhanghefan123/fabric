@@ -193,6 +193,7 @@ func (stream *Stream) operateWithTimeout(invoke StreamOperation, report func(err
 		report(errTimeout)
 		stream.Logger.Warningf("Stream %d to %s(%s) was forcibly terminated because timeout (%v) expired",
 			stream.ID, stream.NodeName, stream.Endpoint, stream.Timeout)
+		// zhf add code: stream.Cancel(err) 是关闭流的流程
 		stream.Cancel(errTimeout)
 		// Wait for the operation goroutine to end
 		operationEnded.Wait()

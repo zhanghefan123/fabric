@@ -112,6 +112,7 @@ func (s *StateCollector) collectedEnoughEqualVotes() *types.ViewAndSeq {
 			s.Logger.Panicf("Node %d collected a message which is not a response", s.SelfID)
 			return nil
 		}
+		// 视图＋序列号结构体
 		viewAndSeq := types.ViewAndSeq{
 			View: response.ViewNum,
 			Seq:  response.Sequence,
@@ -121,7 +122,9 @@ func (s *StateCollector) collectedEnoughEqualVotes() *types.ViewAndSeq {
 		votesMap[viewAndSeq]++
 	}
 	for viewAndSeq, count := range votesMap {
+		// 如果某个 视图＋序列号结构体 对应的数量大于 f, 即有 f+1 个节点处于 view,seq 状态
 		if count > uint64(s.f) {
+			// 返回 viewSeq 结构体
 			return &viewAndSeq
 		}
 	}

@@ -67,7 +67,11 @@ type AuthRequestSignature struct {
 }
 
 // Step passes an implementation-specific message to another cluster member.
+// ClusterService 是一个流式的 grpc 接口, 基本上是使用 rpc BothStreamPing(stream PingRequest) returns (stream PingReply); 类似的 proto 定义的
 func (s *ClusterService) Step(stream orderer.ClusterNodeService_StepServer) error {
+
+	// zhf add code: 从所有的地方来的消息最终都会汇聚到一个队列之中 incMsgs, 不知道这样是否合理，如果采用多个队列，每个队列得到一个就好了。
+
 	s.StreamCountReporter.Increment()
 	defer s.StreamCountReporter.Decrement()
 
@@ -76,7 +80,7 @@ func (s *ClusterService) Step(stream orderer.ClusterNodeService_StepServer) erro
 	exp := s.initializeExpirationCheck(stream, addr, commonName)
 	s.Logger.Debugf("Connection from %s(%s)", commonName, addr)
 
-	// On a new stream, auth request is the first msg
+	// On a new stream, auth request is the first msg, 认证请求需要是第一个消息
 	request, err := stream.Recv()
 	if err == io.EOF {
 		s.Logger.Debugf("%s(%s) disconnected well before establishing the stream", commonName, addr)
@@ -88,6 +92,8 @@ func (s *ClusterService) Step(stream orderer.ClusterNodeService_StepServer) erro
 	}
 
 	s.Lock.RLock()
+
+	// zhf add code: VerifyAuthRequest 是否会出现重复的情况呢?
 	authReq, err := s.VerifyAuthRequest(stream, request)
 	if err != nil {
 		s.Lock.RUnlock()
@@ -95,18 +101,23 @@ func (s *ClusterService) Step(stream orderer.ClusterNodeService_StepServer) erro
 		return status.Errorf(codes.Unauthenticated, "access denied")
 	}
 
+	// 获取下一个流 id
 	streamID := atomic.AddUint64(&s.MembershipByChannel[authReq.Channel].nextStreamID, 1)
+	// 将授权流信息存储在 MembershipByChannel 结构中
 	s.MembershipByChannel[authReq.Channel].AuthorizedStreams.Store(streamID, authReq.FromId)
 	s.Lock.RUnlock()
 
 	defer s.Logger.Debugf("Closing connection from %s(%s)", commonName, addr)
 	defer func() {
+		// 最后进行清理
 		s.Lock.RLock()
 		s.MembershipByChannel[authReq.Channel].AuthorizedStreams.Delete(streamID)
 		s.Lock.RUnlock()
 	}()
 
+	// 处理认证请求后续的消息
 	for {
+		// 可以重放消息把队列占满吗? 或者说处理一个不知道的消息就能够及时的退出
 		err := s.handleMessage(stream, addr, exp, authReq.Channel, authReq.FromId, streamID)
 		if err == io.EOF {
 			s.Logger.Debugf("%s(%s) disconnected", commonName, addr)
@@ -167,6 +178,7 @@ func (s *ClusterService) VerifyAuthRequest(stream orderer.ClusterNodeService_Ste
 		return nil, errors.Errorf("node id mismatch")
 	}
 
+	// zhf add code: 这行代码会不会导致性能严重的下降
 	err = VerifySignature(fromIdentity, SHA256Digest(msg), authReq.Signature)
 	if err != nil {
 		return nil, errors.Wrap(err, "signature mismatch")
@@ -201,16 +213,17 @@ func (s *ClusterService) handleMessage(stream ClusterStepStream, addr string, ex
 		s.StepLogger.Debugf("Received message from %s(%s): %v", nodeName, addr, clusterRequestAsString(request))
 	}
 
+	// 检测是否消息已经过期了,
 	exp.checkExpiration(time.Now(), channel)
 
-	if tranReq := request.GetNodeTranrequest(); tranReq != nil {
+	if tranReq := request.GetNodeTranrequest(); tranReq != nil { // 获取用户的交易信息
 		submitReq := &orderer.SubmitRequest{
 			Channel:           channel,
 			LastValidationSeq: tranReq.LastValidationSeq,
 			Payload:           tranReq.Payload,
 		}
 		return s.RequestHandler.OnSubmit(channel, sender, submitReq)
-	} else if clusterConReq := request.GetNodeConrequest(); clusterConReq != nil {
+	} else if clusterConReq := request.GetNodeConrequest(); clusterConReq != nil { // 获取用户的共识消息
 		conReq := &orderer.ConsensusRequest{
 			Channel:  channel,
 			Payload:  clusterConReq.Payload,

@@ -304,7 +304,6 @@ func (a *BlockVerificationAssistant) verifyMetadata(block *common.Block) error {
 	if block.Metadata == nil || len(block.Metadata.Metadata) < len(common.BlockMetadataIndex_name) {
 		return errors.Errorf("block with id [%d] on channel [%s] does not have metadata or contains too few entries", block.Header.Number, a.channelID)
 	}
-
 	return nil
 }
 

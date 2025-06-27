@@ -1,6 +1,6 @@
 module github.com/hyperledger-labs/SmartBFT
 
-go 1.22
+go 1.23.1
 
 require (
 	github.com/stretchr/testify v1.9.0
@@ -15,4 +15,8 @@ require (
 	github.com/stretchr/objx v0.5.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	github.com/hyperledger/fabric v0.0.0
 )
+
+
+replace github.com/hyperledger/fabric v0.0.0 => ../

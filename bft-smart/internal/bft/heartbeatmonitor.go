@@ -213,31 +213,41 @@ func (hm *HeartbeatMonitor) handleArtificialHeartBeat(sender uint64, hb *smartbf
 	hm.handleHeartBeat(sender, hb, true)
 }
 
+// handleHeartBeat zhf add code: 进行心跳的处理
 func (hm *HeartbeatMonitor) handleHeartBeat(sender uint64, hb *smartbftprotos.HeartBeat, artificial bool) {
+	// 如果 heartbeat 的 view 小于当前的 heart beat, 那么我是领先状态的, 叫别人赶紧和我同步
 	if hb.View < hm.view {
 		hm.logger.Debugf("Heartbeat view is lower than expected, sending response; expected-view=%d, received-view: %d", hm.view, hb.View)
 		hm.sendHeartBeatResponse(sender)
 		return
 	}
 
+	// 检查心跳发送者是否是当前领导者
 	if !hm.stopSendHeartbearFromLeader && sender != hm.leaderID {
+		// 忽略非领导者的心跳
 		hm.logger.Debugf("Heartbeat sender is not leader, ignoring; leader: %d, sender: %d", hm.leaderID, sender)
 		return
 	}
 
+	// 检查如果心跳的视图编号 > 当前的视图编号, 那么就需要进行同步了
 	if hb.View > hm.view {
 		hm.logger.Debugf("Heartbeat view is bigger than expected, syncing and ignoring; expected-view=%d, received-view: %d", hm.view, hb.View)
 		hm.handler.Sync()
 		return
 	}
 
+	// 如果没有的话, 调用 viewActive 判断视图是否活跃，并获取序列号
 	active, ourSeq := hm.viewActive(hb)
+	// 如果是活跃的
 	if active && !artificial {
+		// 检查心跳序列号是否远大于本地序列号
 		if ourSeq+1 < hb.Seq {
 			hm.logger.Debugf("Heartbeat sequence is bigger than expected, leader's sequence is %d and ours is %d, syncing and ignoring", hb.Seq, ourSeq)
+			// 如果是的话就进行同步
 			hm.handler.Sync()
 			return
 		}
+		// 如果心跳序列号刚好比本地序列号大1, 那么进行记录自己处于落后的状态
 		if ourSeq+1 == hb.Seq {
 			hm.followerBehind = true
 			hm.logger.Debugf("Our sequence is behind the heartbeat sequence, leader's sequence is %d and ours is %d", hb.Seq, ourSeq)
@@ -256,18 +266,22 @@ func (hm *HeartbeatMonitor) handleHeartBeat(sender uint64, hb *smartbftprotos.He
 	hm.lastHeartbeat = hm.lastTick
 }
 
-// handleHeartBeatResponse keeps track of responses, and if we get f+1 identical, force a sync
+// handleHeartBeatResponse keeps track of responses, and if we get f+1 identical, force a sync 处理 heartbeatResponse 消息
+// 如果 leader 落后于集群的多数节点，它需要及时同步，否则会阻碍共识进展 （例如提出过时的提案，但是大家都不会接受）
 func (hm *HeartbeatMonitor) handleHeartBeatResponse(sender uint64, hbr *smartbftprotos.HeartBeatResponse) {
+	// 如果自己是 follower, 那么直接或略
 	if hm.follower {
 		hm.logger.Debugf("Monitor is not a leader, ignoring HeartBeatResponse; sender: %d, msg: %v", sender, hbr)
 		return
 	}
 
+	// 判断是否已经调用过了 sync()
 	if hm.syncReq {
 		hm.logger.Debugf("Monitor already called Sync, ignoring HeartBeatResponse; sender: %d, msg: %v", sender, hbr)
 		return
 	}
 
+	// 判断自己的视图编号是否大于心跳响应的视图编号
 	if hm.view >= hbr.View {
 		hm.logger.Debugf("Monitor view: %d >= HeartBeatResponse, ignoring; sender: %d, msg: %v", hm.view, sender, hbr)
 		return
@@ -276,7 +290,7 @@ func (hm *HeartbeatMonitor) handleHeartBeatResponse(sender uint64, hbr *smartbft
 	hm.logger.Debugf("Received HeartBeatResponse, msg: %v; from %d", hbr, sender)
 	hm.hbRespCollector[sender] = hbr.View
 
-	// check if we have f+1 votes
+	// check if we have f+1 votes, 还需要收投票, 只有收集到了 f+1 个人都说我视图落后了，我才开始同步，确保有一个诚实节点认为我落后了我才进行同步
 	_, f := computeQuorum(hm.numberOfNodes)
 	if len(hm.hbRespCollector) >= f+1 {
 		hm.logger.Infof("Received HeartBeatResponse triggered a call to HeartBeatEventHandler Sync, view: %d", hbr.View)
@@ -285,14 +299,17 @@ func (hm *HeartbeatMonitor) handleHeartBeatResponse(sender uint64, hbr *smartbft
 	}
 }
 
+// sendHeartBeatResponse zhf add code: 发送心跳响应, 当发现别人落后于自己的时候呼叫别人紧急同步
 func (hm *HeartbeatMonitor) sendHeartBeatResponse(target uint64) {
+	// 构造 heartbeatResponse 消息
 	heartbeatResponse := &smartbftprotos.Message{
 		Content: &smartbftprotos.Message_HeartBeatResponse{
 			HeartBeatResponse: &smartbftprotos.HeartBeatResponse{
-				View: hm.view,
+				View: hm.view, // 携带当前自己的视图编号
 			},
 		},
 	}
+	// 进行消息的发送
 	hm.comm.SendConsensus(target, heartbeatResponse)
 	hm.logger.Debugf("Sent HeartBeatResponse view: %d; to %d", hm.view, target)
 }

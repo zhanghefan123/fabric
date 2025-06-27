@@ -106,6 +106,7 @@ func (c *Consensus) GetLeaderID() uint64 {
 }
 
 func (c *Consensus) Start(enableRoutine bool) error {
+
 	if err := c.ValidateConfiguration(c.Comm.Nodes()); err != nil {
 		return fmt.Errorf("configuration is invalid: %w", err)
 	}

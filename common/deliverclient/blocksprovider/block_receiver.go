@@ -63,7 +63,6 @@ func (br *BlockReceiver) Start() {
 				close(br.recvC)
 				return
 			}
-
 		}
 	}()
 }
@@ -105,6 +104,7 @@ RecvLoop: // Loop until the endpoint is refreshed, or there is an error on the c
 			}
 			var blockNum uint64
 			var channelConfig *common.Config
+			// BlockReceiver processMsg
 			blockNum, channelConfig, err = br.processMsg(response)
 			if err != nil {
 				br.logger.Warningf("Got error while attempting to receive blocks: %v", err)
@@ -134,13 +134,14 @@ func (br *BlockReceiver) processMsg(msg *orderer.DeliverResponse) (uint64, *comm
 		}
 
 		return 0, nil, errors.Errorf("received bad status %v from orderer", t.Status)
+	// 如果收到的是响应的去亏啊
 	case *orderer.DeliverResponse_Block:
 		blockNum := t.Block.Header.Number
-
+		// 验证区块
 		if err := br.updatableBlockVerifier.VerifyBlock(t.Block); err != nil {
 			return 0, nil, errors.WithMessagef(err, "block [%d] from orderer [%s] could not be verified", blockNum, br.endpoint.String())
 		}
-
+		// 处理区块
 		err := br.blockHandler.HandleBlock(br.channelID, t.Block)
 		if err != nil {
 			return 0, nil, errors.WithMessagef(err, "block [%d] from orderer [%s] could not be handled", blockNum, br.endpoint.String())
@@ -149,6 +150,8 @@ func (br *BlockReceiver) processMsg(msg *orderer.DeliverResponse) (uint64, *comm
 		br.logger.Debugf("Handled block %d", blockNum)
 
 		var channelConfig *common.Config
+
+		// 如果是配置块
 		if protoutil.IsConfigBlock(t.Block) {
 			configEnv, err := deliverclient.ConfigFromBlock(t.Block)
 			if err != nil {

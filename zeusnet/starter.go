@@ -25,6 +25,8 @@ func Start() error {
 	if err != nil {
 		return fmt.Errorf("start frr failed: %w", err)
 	}
-	// 3. 等待第一个接口启动了再启动
+	// 3. 进行周期性的区块的写入
+
+	// 4. 等待第一个接口启动了再启动
 	return nil
 }

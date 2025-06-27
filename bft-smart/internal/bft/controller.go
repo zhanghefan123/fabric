@@ -580,11 +580,11 @@ func (c *Controller) checkIfRotate(blacklist []uint64) bool {
 }
 
 func (c *Controller) sync() (viewNum uint64, seq uint64, decisions uint64) {
-	// Block any concurrent sync attempt.
+	// Block any concurrent sync attempt. 向长度为 1 的channel 之中放一个元素, 这样就能阻止其他的并发同步请求了
 	c.grabSyncToken()
 	// At exit, enable sync once more, but ignore
 	// all synchronization attempts done while
-	// we were syncing.
+	// we were syncing. 将 channel 之中的元素取出, 从而可以继续进行 sync 了
 	defer c.relinquishSyncToken()
 
 	c.syncLock.Lock()
@@ -603,17 +603,22 @@ func (c *Controller) sync() (viewNum uint64, seq uint64, decisions uint64) {
 	// In other cases we should not update the checkpoint.
 	// However, we always must fetch the latest state from other nodes,
 	// since the view may have advanced without this node and with no decisions.
+	// 同步器返回一个响应, 其中包含最新的决策及其提案的元数据。此提案可能为空(其元数据为空)。这意味着同步器不知道任何已做出的决策。
+	// 否则，返回的最新提案序列可能高于我们最新的序列，这意味着我们应该更新检查点。在其他情况下，我们不应该更新检查点。但是，我们必须始终从其他节点获取最新状态，
+	// 因为视图可能在没有此节点且没有任何决策的情况下就已经前进了。
 
 	var newViewNum, newProposalSequence, newDecisionsInView uint64
 
-	latestDecision := syncResponse.Latest
+	latestDecision := syncResponse.Latest // 同步响应之中最新的决定
 	var latestDecisionSeq, latestDecisionViewNum, latestDecisionDecisions uint64
 	var latestDecisionMetadata *protos.ViewMetadata
+	// 如果元数据为空,
 	if len(latestDecision.Proposal.Metadata) == 0 {
 		c.Logger.Infof("Synchronizer returned with an empty proposal metadata")
 		latestDecisionMetadata = nil
 	} else {
 		md := &protos.ViewMetadata{}
+		// 将元数据进行反序列化
 		if err := proto.Unmarshal(latestDecision.Proposal.Metadata, md); err != nil {
 			c.Logger.Panicf("Controller was unable to unmarshal the proposal metadata returned by the Synchronizer")
 		}
@@ -629,6 +634,7 @@ func (c *Controller) sync() (viewNum uint64, seq uint64, decisions uint64) {
 	controllerViewNum := c.currViewNumber
 	newViewNum = controllerViewNum
 
+	// 当同步器返回的序列号 大于 本地序列号
 	if latestDecisionSeq > controllerSequence {
 		c.Logger.Infof("Synchronizer returned with sequence %d while the controller is at sequence %d", latestDecisionSeq, controllerSequence)
 		c.Logger.Debugf("Node %d is setting the checkpoint after sync returned with view %d and seq %d", c.ID, latestDecisionViewNum, latestDecisionSeq)
@@ -638,12 +644,15 @@ func (c *Controller) sync() (viewNum uint64, seq uint64, decisions uint64) {
 		newDecisionsInView = latestDecisionDecisions + 1
 	}
 
+	// 视图号对比, 当前的视图号大于本地视图号，更新本地视图号
 	if latestDecisionViewNum > controllerViewNum {
 		c.Logger.Infof("Synchronizer returned with view number %d while the controller is at view number %d", latestDecisionViewNum, controllerViewNum)
 		newViewNum = latestDecisionViewNum
 	}
 
+	// 二次验证, 从其他节点获取最新状态 (包含 sequence 和 view ), 确保同步结果的正确性
 	response := c.fetchState()
+	// 如果为空则返回 0,0,0
 	if response == nil {
 		c.Logger.Infof("Fetching state failed")
 		if latestDecisionMetadata == nil || latestDecisionViewNum < controllerViewNum {
@@ -651,9 +660,11 @@ func (c *Controller) sync() (viewNum uint64, seq uint64, decisions uint64) {
 			return 0, 0, 0
 		}
 	} else {
+		// 如果 fetchState 获取到的 view 小于等于当前的 viewNumber 并且 synchoronizer 获取的 viewNumber 小于 controller 的 viewNumber
 		if response.View <= controllerViewNum && latestDecisionViewNum < controllerViewNum {
 			return 0, 0, 0 // no new view to report
 		}
+		// 如果 fetchState 获取到的 view 大于 synchoronizer 获取的 viewNumber 并且响应的序列号等于最新的序列号 + 1
 		if response.View > newViewNum && response.Seq == latestDecisionSeq+1 {
 			c.Logger.Infof("Node %d collected state with view %d and sequence %d", c.ID, response.View, response.Seq)
 			newViewToSave := &protos.SavedMessage{
@@ -710,14 +721,18 @@ func (c *Controller) maybePruneInFlight(syncResultViewMD *protos.ViewMetadata) {
 	c.InFlight.clear()
 }
 
+// fetchState 进行状态的获取
 func (c *Controller) fetchState() *types.ViewAndSeq {
 	msg := &protos.Message{
 		Content: &protos.Message_StateTransferRequest{
 			StateTransferRequest: &protos.StateTransferRequest{},
 		},
 	}
+	// 清空收集到的 stateResponse
 	c.Collector.ClearCollected()
+	// 进行 StateTransferRequest 消息的广播
 	c.BroadcastConsensus(msg)
+	// 从 StateCollector 中专属的 incMsgs 之中进行消息的接受
 	return c.Collector.CollectStateResponses()
 }
 

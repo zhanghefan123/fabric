@@ -1344,6 +1344,7 @@ func (v *ViewChanger) Sync() {
 }
 
 // HandleViewMessage passes a message to the in flight proposal view if applicable
+// 当节点正在进行视图变更的时候, 某些消息可能需要被临时视图（in-flight view）处理，而不是当前活跃视图。
 func (v *ViewChanger) HandleViewMessage(sender uint64, m *protos.Message) {
 	fmt.Printf("zhf add code: handle view change message\n")
 	v.inFlightViewLock.RLock()
