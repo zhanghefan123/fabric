@@ -91,11 +91,12 @@ type View struct {
 	InMsgQSize         int
 	// Runtime
 	lastVotedProposalByID map[uint64]*protos.Commit
-	incMsgs               chan *incMsg
-	myProposalSig         *types.Signature
-	inFlightProposal      *types.Proposal
-	inFlightRequests      []types.RequestInfo
-	lastBroadcastSent     *protos.Message
+	incMsgs               chan *incMsg // zhf 消息队列
+
+	myProposalSig     *types.Signature
+	inFlightProposal  *types.Proposal
+	inFlightRequests  []types.RequestInfo
+	lastBroadcastSent *protos.Message
 	// Current sequence sent prepare and commit
 	currPrepareSent *protos.Message
 	currCommitSent  *protos.Message
@@ -134,7 +135,6 @@ func (v *View) Start() {
 
 	v.prePrepare = make(chan *protos.Message, 1)
 	v.nextPrePrepare = make(chan *protos.Message, 1)
-
 	v.setupVotes()
 
 	go func() {
@@ -182,6 +182,17 @@ func (v *View) setupVotes() {
 	v.nextCommits.clear(v.N)
 }
 
+func (v *View) OriginalHandleMessage(sender uint64, m *protos.Message) {
+	msg := &incMsg{sender: sender, Message: m}
+	select {
+	case <-v.abortChan:
+		fmt.Printf("zhf add code: abortChan received message\n")
+		return
+	case v.incMsgs <- msg: // incMsgs 的长度为 200
+		fmt.Printf("zhf add code: v.incMsgs received message current length %d with capacity %d\n", len(v.incMsgs), cap(v.incMsgs))
+	}
+}
+
 // HandleMessage handles incoming messages
 func (v *View) HandleMessage(sender uint64, m *protos.Message) {
 	msg := &incMsg{sender: sender, Message: m}
@@ -189,7 +200,6 @@ func (v *View) HandleMessage(sender uint64, m *protos.Message) {
 	case <-v.abortChan:
 		fmt.Printf("zhf add code: abortChan received message\n")
 		return
-	// 全是向 incMsgs 之中塞入内容
 	case v.incMsgs <- msg: // incMsgs 的长度为 200
 		fmt.Printf("zhf add code: v.incMsgs received message current length %d with capacity %d\n", len(v.incMsgs), cap(v.incMsgs))
 	}

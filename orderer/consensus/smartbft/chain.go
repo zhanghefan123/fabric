@@ -9,6 +9,7 @@ package smartbft
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/hyperledger/fabric/zeusnet/bft_related"
 	"github.com/hyperledger/fabric/zeusnet/modules/info"
 	"github.com/hyperledger/fabric/zeusnet/tools/file"
 	"github.com/hyperledger/fabric/zeusnet/variables"
@@ -89,7 +90,8 @@ type BFTChain struct {
 	consensusRelation types2.ConsensusRelation
 	status            types2.Status
 
-	StopRecordChan chan struct{}
+	// zhf add code
+	StopRecordChan chan struct{} // 停止记录的信道
 }
 
 // NewChain creates new BFT Smart chain
@@ -164,7 +166,6 @@ func NewChain(
 	}
 
 	c.RuntimeConfig.Store(rtc)
-
 	c.verifier = buildVerifier(cv, c.RuntimeConfig, support, requestInspector, policyManager)
 	c.consensus = bftSmartConsensusBuild(c, requestInspector, egressCommFactory, synchronizerFactory)
 
@@ -505,6 +506,10 @@ func (c *BFTChain) Start() {
 		c.Logger.Panicf("Failed to start chain, aborting: %+v", err)
 	}
 	c.reportIsLeader() // report the leader
+
+	// zhf add code
+	// 为全局变量设置上 controller
+	bft_related.ConsensusController = c.consensus.GetController()
 }
 
 // WriteCurrentNodeId writes the current node id to the configuration/nodeId.txt.

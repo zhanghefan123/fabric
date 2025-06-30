@@ -8,7 +8,6 @@ package smartbft
 
 import (
 	"fmt"
-	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -69,7 +68,7 @@ func (e *Egress) SendConsensus(targetID uint64, m *protos.Message) {
 	diff := endTime.Sub(startTime)
 	if err != nil {
 		// zhf add code 进行调用栈的打印
-		debug.PrintStack()
+		//debug.PrintStack()
 		fmt.Printf("zhf add code: Failed sending to %d, which takes %f seconds to time out: %v\n", targetID, diff.Seconds(), err)
 		// zhf add code 进行调用栈的打印
 		fmt.Printf("zhf add code: sendConsensusError to target %d with %s \n", targetID, m.String())

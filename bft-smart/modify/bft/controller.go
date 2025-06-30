@@ -7,6 +7,7 @@ package bft
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -116,9 +117,6 @@ type Controller struct {
 	MetricsView        *api.MetricsView
 	quorum             int
 
-	NodeMessageLimiter map[uint64]chan struct{} // zhf add code
-	EnableRoutine      bool                     // zhf add code
-
 	currView Proposer
 
 	currViewLock   sync.RWMutex
@@ -145,6 +143,51 @@ type Controller struct {
 
 	StartedWG *sync.WaitGroup
 	syncLock  sync.Mutex
+
+	// zhf add code
+	// -----------------------------------------
+	EnableRoutine         bool
+	InsiderAttackInstance *InsiderAttack
+	RecentlySendMsg       *protos.Message
+
+	validatorToMsgQueue  map[uint64]chan *protos.Message // zhf add code 从 validator 到对应的 msgQueue
+	indexToMsgQueue      map[int]chan *protos.Message    // zhf add code 从 index 到对应的 msgQueue (1,2,3,4)
+	indexToSenderMapping map[int]uint64                  // zhf add code 从 index 到对应的 sender
+	blackList            map[uint64]struct{}             // zhf add code 黑名单
+	nextIndex            int                             // zhf add code 下一个开始查找的索引
+
+	senderMessagePerSecond map[uint64]*float64 // zhf add code 记录从每个 sender 发送过来的消息, 每秒有多少个
+	senderMessageCount     map[uint64]*uint64  // zhf add code 记录从每个 sender 自从 lastRecordTime 发送过来的消息
+	lastRecordTime         time.Time           // zhf add code 记录上一次统计的时间
+	abortChannel           chan struct{}       // zhf add code 停止的信道
+	abortHandleChannel     chan struct{}       // zhf add code 停止的信道
+	// -----------------------------------------
+
+}
+
+// StartAttackLeader 攻击主节点
+func (c *Controller) StartAttackLeader() error {
+	if c.InsiderAttackInstance != nil {
+		return fmt.Errorf("attack already started")
+	}
+	if c.RecentlySendMsg == nil {
+		return fmt.Errorf("no messsage to send")
+	}
+	// 这里应该是追着现有的 leader 进行攻击, 而不是一开始就锁定一个 leader 进行攻击
+	c.InsiderAttackInstance = NewInsiderAttackInstance()
+	c.InsiderAttackInstance.StartAttackLeader(c, nil)
+	// 接着进行结果的返回
+	return nil
+}
+
+// StopAttackLeader 停止攻击主节点
+func (c *Controller) StopAttackLeader() error {
+	if c.InsiderAttackInstance == nil {
+		return fmt.Errorf("attack already stopped")
+	}
+	c.InsiderAttackInstance.StopAttackLeader()
+	c.InsiderAttackInstance = nil
+	return nil
 }
 
 func (c *Controller) blacklist() []uint64 {
@@ -321,31 +364,152 @@ func (c *Controller) OnHeartbeatTimeout(view uint64, leaderID uint64) {
 	c.FailureDetector.Complain(c.getCurrentViewNumber(), true)
 }
 
-// ProcessMessages dispatches the incoming message to the required component
-func (c *Controller) ProcessMessages(sender uint64, m *protos.Message) {
-	c.Logger.Debugf("%d got message from %d: %s", c.ID, sender, MsgToString(m))
-	switch m.GetContent().(type) {
+// HandleDifferentTypesOfMessage zhf add code 处理不同类型消息
+func (c *Controller) HandleDifferentTypesOfMessage(sender uint64, message *protos.Message) {
+	switch message.GetContent().(type) {
 	case *protos.Message_PrePrepare, *protos.Message_Prepare, *protos.Message_Commit:
-		fmt.Printf("zhf add code: enter into case *protos.Message_PrePrepare, *protos.Message_Prepare, *protos.Message_Commit: \n")
 		c.currViewLock.RLock()
 		view := c.currView
 		c.currViewLock.RUnlock()
-		view.HandleMessage(sender, m)
-		c.ViewChanger.HandleViewMessage(sender, m)
+		// 应该随 controller 一起开启而不是随 view 一起开启, 来进行信息的统计
+		view.HandleMessage(sender, message)
+		c.ViewChanger.HandleViewMessage(sender, message)
 		// 其他的节点发过来的消息肯定不可能进入这个 if 条件
 		if sender == c.leaderID() {
-			c.LeaderMonitor.InjectArtificialHeartbeat(sender, c.convertViewMessageToHeartbeat(m))
+			c.LeaderMonitor.InjectArtificialHeartbeat(sender, c.convertViewMessageToHeartbeat(message))
 		}
 	case *protos.Message_ViewChange, *protos.Message_ViewData, *protos.Message_NewView:
-		c.ViewChanger.HandleMessage(sender, m)
+		c.ViewChanger.HandleMessage(sender, message)
 	case *protos.Message_HeartBeat, *protos.Message_HeartBeatResponse:
-		c.LeaderMonitor.ProcessMsg(sender, m)
+		c.LeaderMonitor.ProcessMsg(sender, message)
 	case *protos.Message_StateTransferRequest:
 		c.respondToStateTransferRequest(sender)
 	case *protos.Message_StateTransferResponse:
-		c.Collector.HandleMessage(sender, m)
+		c.Collector.HandleMessage(sender, message)
 	default:
 		c.Logger.Warnf("Unexpected message type, ignoring")
+	}
+}
+
+// StartHandleMessageFromQueues zhf add code 从多个队列之中取队头进行处理
+func (c *Controller) StartHandleMessageFromQueues() {
+	// 从各个队列的队头取出元素进行处理
+	fmt.Println("StartHandleMessageFromQueues")
+Loop:
+	for {
+		select {
+		case <-c.abortHandleChannel:
+			break Loop
+		default:
+			for index, msgQueue := range c.indexToMsgQueue {
+				// 进行判断, 如果是 blacklist 的话则进行跳过
+				sender := c.indexToSenderMapping[index]
+				if _, ok := c.blackList[sender]; ok {
+					continue
+				}
+				// 如果是 sender 的话
+				var message *protos.Message
+				select {
+				case message = <-msgQueue:
+					fmt.Println("HandleDifferentTypesOfMessage")
+					c.HandleDifferentTypesOfMessage(sender, message)
+				default:
+				}
+			}
+			time.Sleep(time.Millisecond * 1)
+		}
+	}
+}
+
+// StopHandleMessageFromQueues zhf add code 停止进行消息的处理
+func (c *Controller) StopHandleMessageFromQueues() {
+	c.abortHandleChannel <- struct{}{}
+}
+
+// ProcessMessages zhf add code dispatches the incoming message to the required component
+func (c *Controller) ProcessMessages(sender uint64, m *protos.Message) {
+	c.Logger.Debugf("%d got message from %d: %s", c.ID, sender, MsgToString(m))
+	// zhf add code 进行实时的消息的记录
+	// -------------------------
+	c.RecordMessageSender(sender)
+	// -------------------------
+
+	// zhf add code
+	// -------------------------
+	if len(c.validatorToMsgQueue[sender]) != cap(c.validatorToMsgQueue[sender]) {
+		c.validatorToMsgQueue[sender] <- m
+	}
+	// -------------------------
+}
+
+// SpeedAndSender zhf add code Speed and Sender 结构体
+type SpeedAndSender struct {
+	sender uint64
+	speed  float64
+}
+
+// StartPrintMessageReceiveSpeedPeriodically zhf add code 开启周期性记录
+func (c *Controller) StartPrintMessageReceiveSpeedPeriodically() {
+	// 记录的时间尺度
+	timeDuration := time.Second
+Loop:
+	for {
+		select {
+		case <-c.abortChannel:
+			break Loop
+		default:
+			var speedAndSenderList []SpeedAndSender
+			for sender, countPtr := range c.senderMessageCount {
+				count := atomic.LoadUint64(countPtr)
+				speed := float64(count) / timeDuration.Seconds()
+				atomic.StoreUint64(countPtr, 0)
+				speedAndSender := SpeedAndSender{
+					speed:  speed,
+					sender: sender,
+				}
+				speedAndSenderList = append(speedAndSenderList, speedAndSender)
+			}
+			sort.Slice(speedAndSenderList, func(i, j int) bool {
+				return speedAndSenderList[i].speed < speedAndSenderList[j].speed
+			})
+			_, F := computeQuorum(c.N)
+			largestSpeed := speedAndSenderList[F].speed
+			if largestSpeed < 100 {
+				time.Sleep(timeDuration)
+				continue
+			} else {
+				for index := F; index < len(speedAndSenderList); index++ {
+					speedAndSender := speedAndSenderList[index]
+					if speedAndSender.speed > 5*largestSpeed {
+						fmt.Printf("is attacker %d\n", speedAndSender.sender)
+						// 判断是否已经在 blackList 之中了
+						if _, ok := c.blackList[speedAndSender.sender]; !ok {
+							c.blackList[speedAndSender.sender] = struct{}{}
+						}
+					} else {
+						fmt.Printf("not attacker %d\n", speedAndSender.sender)
+						if _, ok := c.blackList[speedAndSender.sender]; ok {
+							delete(c.blackList, speedAndSender.sender)
+						}
+					}
+				}
+				time.Sleep(timeDuration)
+			}
+		}
+	}
+}
+
+// StopPrintMessageReceiveSpeedPeriodically zhf add code 停止周期性记录
+func (c *Controller) StopPrintMessageReceiveSpeedPeriodically() {
+	c.abortChannel <- struct{}{}
+}
+
+// RecordMessageSender zhf add code 进行消息的记录
+func (c *Controller) RecordMessageSender(sender uint64) {
+	// 在这里可以统计一下
+	if sender != c.ID {
+		countPtr := c.senderMessageCount[sender]
+		atomic.AddUint64(countPtr, 1) // 原子递增，无需锁
 	}
 }
 
@@ -424,7 +588,7 @@ func (c *Controller) changeView(newViewNumber uint64, newProposalSequence uint64
 	c.setCurrentViewNumber(newViewNumber)
 	c.setCurrentDecisionsInView(newDecisionsInView)
 	c.Logger.Debugf("Starting view after setting decisions in view to %d", newDecisionsInView)
-	c.startView(newProposalSequence)
+	c.startView(newProposalSequence) // 这一行被调用了
 
 	if iAm, _ := c.iAmTheLeader(); iAm {
 		c.Batcher.Reset()
@@ -518,6 +682,7 @@ func (c *Controller) run() {
 			view, seq, dec := c.sync()
 			c.MaybePruneRevokedRequests()
 			if view > 0 || seq > 0 {
+				// 这一行被调用了
 				c.changeView(view, seq, dec)
 			} else {
 				c.Logger.Debugf("view and seq is zero")
@@ -824,7 +989,43 @@ func (c *Controller) Start(startViewNumber uint64, startProposalSequence uint64,
 
 	c.currViewNumber = startViewNumber
 	c.currDecisionsInView = startDecisionsInView
-	c.startView(startProposalSequence)
+	// zhf add code view 是以协程的方式运行的
+	c.startView(startProposalSequence) // 进行调用
+
+	// zhf add code 为每个验证者都给出一个消息队列, 每次进行消息处理的时候轮询进行处理
+	// ---------------------------------------------
+	c.senderMessagePerSecond = make(map[uint64]*float64)
+	c.senderMessageCount = make(map[uint64]*uint64)
+	c.lastRecordTime = time.Now()
+
+	c.validatorToMsgQueue = make(map[uint64]chan *protos.Message)
+	c.indexToMsgQueue = make(map[int]chan *protos.Message)
+	c.indexToSenderMapping = make(map[int]uint64)
+	c.blackList = make(map[uint64]struct{})
+	c.abortChannel = make(chan struct{})
+	c.abortHandleChannel = make(chan struct{})
+	c.nextIndex = 0
+
+	index := 0
+	for _, node := range c.NodesList {
+		if node != c.ID {
+			var count uint64 = 0
+			var speed float64 = 0
+
+			c.senderMessagePerSecond[node] = &speed // 初始的速度为 0
+			c.senderMessageCount[node] = &count     // 初始收包的数量为 0
+
+			msgQueue := make(chan *protos.Message, 200)
+			c.validatorToMsgQueue[node] = msgQueue
+			c.indexToMsgQueue[index] = msgQueue
+			c.indexToSenderMapping[index] = node
+			index += 1
+		}
+	}
+	fmt.Println("v.StartPrintMessageReceiveSpeedPeriodically")
+	go c.StartPrintMessageReceiveSpeedPeriodically()
+	go c.StartHandleMessageFromQueues()
+	// ---------------------------------------------
 
 	go func() {
 		defer c.controllerDone.Done()
@@ -853,6 +1054,9 @@ func (c *Controller) Stop() {
 	c.Batcher.Close()
 	c.RequestPool.Close()
 	c.LeaderMonitor.Close()
+	// zhf add code
+	c.StopPrintMessageReceiveSpeedPeriodically()
+	c.StopHandleMessageFromQueues()
 
 	// Drain the leader token if we hold it.
 	select {
@@ -931,12 +1135,6 @@ type decision struct {
 
 // BroadcastConsensus broadcasts the message and informs the heartbeat monitor if necessary
 func (c *Controller) BroadcastConsensus(m *protos.Message) {
-	//defer func(startTime time.Time) {
-	//	timeDuration := time.Since(startTime)
-	//	if timeDuration > time.Second {
-	//		fmt.Printf("broadcast consensus takes %v\n to finish\n", timeDuration)
-	//	}
-	//}(time.Now())
 	if c.EnableRoutine {
 		for _, node := range c.NodesList {
 			if c.ID == node {
@@ -944,6 +1142,7 @@ func (c *Controller) BroadcastConsensus(m *protos.Message) {
 			}
 			go c.Comm.SendConsensus(node, m)
 		}
+		c.RecentlySendMsg = m
 	} else {
 		for _, node := range c.NodesList {
 			if c.ID == node {
@@ -951,18 +1150,8 @@ func (c *Controller) BroadcastConsensus(m *protos.Message) {
 			}
 			c.Comm.SendConsensus(node, m)
 		}
+		c.RecentlySendMsg = m
 	}
-
-	//select {
-	//case c.NodeMessageLimiter[node] <- struct{}{}: // 获取令牌
-	//	go func(nodeId uint64) {
-	//		defer func() { <-c.NodeMessageLimiter[node] }() // 释放令牌
-	//		c.Comm.SendConsensus(nodeId, m)
-	//	}(node)
-	//default:
-	//	// 如果进入到了这个 case 也不会阻碍后续的 broadcastConsensus 的执行
-	//	fmt.Println("zhf: concurrency limit exceeded (50)")
-	//}
 
 	// 如果消息是 PrePrepare, Prepare, Commit, 心跳消息显然不是
 	if m.GetPrePrepare() != nil || m.GetPrepare() != nil || m.GetCommit() != nil {

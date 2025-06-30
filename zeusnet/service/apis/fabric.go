@@ -3,6 +3,7 @@ package apis
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/hyperledger/fabric/zeusnet/bft_related"
 	"github.com/hyperledger/fabric/zeusnet/variables"
 )
 
@@ -31,4 +32,31 @@ func StopFabric(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "successfully stop fabric",
 	})
+}
+
+func StartAttack(c *gin.Context) {
+	err := bft_related.ConsensusController.StartAttackLeader()
+	if err != nil {
+		fmt.Printf("error %v", err)
+		c.JSON(500, gin.H{
+			"message": fmt.Errorf("attack failed: %v", err),
+		})
+	} else {
+		c.JSON(200, gin.H{
+			"message": "successfully launch insider attack",
+		})
+	}
+}
+
+func StopAttack(c *gin.Context) {
+	err := bft_related.ConsensusController.StopAttackLeader()
+	if err != nil {
+		c.JSON(500, gin.H{
+			"message": fmt.Errorf("stop attack failed: %v", err),
+		})
+	} else {
+		c.JSON(200, gin.H{
+			"message": "successfully stop insider attack",
+		})
+	}
 }

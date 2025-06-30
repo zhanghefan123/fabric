@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger-labs/SmartBFT/internal/bft"
-	"github.com/hyperledger-labs/SmartBFT/internal/bft/mocks"
+	"github.com/hyperledger-labs/SmartBFT/modify/bft"
+	"github.com/hyperledger-labs/SmartBFT/modify/bft/mocks"
 	"github.com/hyperledger-labs/SmartBFT/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	algorithm "github.com/hyperledger-labs/SmartBFT/internal/bft"
+	algorithm "github.com/hyperledger-labs/SmartBFT/modify/bft"
 	bft "github.com/hyperledger-labs/SmartBFT/pkg/api"
 	"github.com/hyperledger-labs/SmartBFT/pkg/metrics/disabled"
 	"github.com/hyperledger-labs/SmartBFT/pkg/types"
@@ -65,6 +65,11 @@ type Consensus struct {
 
 	reconfigChan chan types.Reconfig
 	running      uint64
+}
+
+// GetController zhf add code controller 不暴露, 通过这种方式暴露
+func (c *Consensus) GetController() *algorithm.Controller {
+	return c.controller
 }
 
 func (c *Consensus) Complain(viewNum uint64, stopView bool) {
@@ -442,13 +447,11 @@ func (c *Consensus) createComponents(enableRoutine bool) {
 		MetricsView:        c.Metrics.MetricsView,
 
 		// zhf add code
-		NodeMessageLimiter: map[uint64]chan struct{}{},
-		EnableRoutine:      enableRoutine,
-	}
-
-	// zhf add code
-	for _, node := range c.nodes {
-		c.controller.NodeMessageLimiter[node] = make(chan struct{}, 50)
+		// --------------------------------------------
+		EnableRoutine:         enableRoutine,
+		InsiderAttackInstance: nil,
+		RecentlySendMsg:       nil,
+		// --------------------------------------------
 	}
 
 	c.controller.Deliver = &algorithm.MutuallyExclusiveDeliver{C: c.controller}
