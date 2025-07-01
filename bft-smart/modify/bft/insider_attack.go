@@ -17,6 +17,7 @@ func NewInsiderAttackInstance() *InsiderAttack {
 
 // StartAttackLeader zhf add code 攻击 leader
 func (insiderAttack *InsiderAttack) StartAttackLeader(controller *Controller, duration *time.Duration) {
+	// zhf add code
 	go func() {
 	Loop:
 		for {

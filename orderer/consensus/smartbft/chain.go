@@ -10,9 +10,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/hyperledger/fabric/zeusnet/bft_related"
+	"github.com/hyperledger/fabric/zeusnet/modules/config"
 	"github.com/hyperledger/fabric/zeusnet/modules/info"
 	"github.com/hyperledger/fabric/zeusnet/tools/file"
-	"github.com/hyperledger/fabric/zeusnet/variables"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -502,7 +502,7 @@ func (c *BFTChain) Start() {
 	c.StartRecordHeight()
 	// -----------------------------------------------------------------------
 
-	if err = c.consensus.Start(variables.EnvLoaderInstance.EnableRoutine); err != nil {
+	if err = c.consensus.Start(config.EnvLoaderInstance.EnableRoutine); err != nil {
 		c.Logger.Panicf("Failed to start chain, aborting: %+v", err)
 	}
 	c.reportIsLeader() // report the leader
@@ -514,7 +514,7 @@ func (c *BFTChain) Start() {
 
 // WriteCurrentNodeId writes the current node id to the configuration/nodeId.txt.
 func (c *BFTChain) WriteCurrentNodeId() error {
-	envLoader := variables.EnvLoaderInstance
+	envLoader := config.EnvLoaderInstance
 	go func() {
 		outputFilePath := filepath.Join("/configuration", fmt.Sprintf("%s/%s", envLoader.ContainerName, "nodeId.txt"))
 		for {

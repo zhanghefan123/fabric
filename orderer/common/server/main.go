@@ -10,9 +10,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/hyperledger/fabric/zeusnet/modules/config"
 	"github.com/hyperledger/fabric/zeusnet/modules/system"
 	"github.com/hyperledger/fabric/zeusnet/service"
-	"github.com/hyperledger/fabric/zeusnet/variables"
 	"net"
 	"net/http"
 	_ "net/http/pprof" // This is essentially the main package for the orderer
@@ -266,14 +266,14 @@ func Main() {
 	logger.Info("Beginning to serve requests")
 
 	if !reuseGrpcListener {
-		variables.ParameterInstance = &system.Parameter{
+		system.ParameterInstance = &system.Parameter{
 			OpsSystem:         opsSystem,
 			AdminServer:       adminServer,
 			GrpcServer:        grpcServer,
 			ClusterGRPCServer: clusterGRPCServer,
 		}
 	} else {
-		variables.ParameterInstance = &system.Parameter{
+		system.ParameterInstance = &system.Parameter{
 			OpsSystem:         opsSystem,
 			AdminServer:       adminServer,
 			GrpcServer:        grpcServer,
@@ -284,7 +284,7 @@ func Main() {
 	// ------------------------------------------------------------------------------------
 	router := service.InitRouter()
 	fabricServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", variables.EnvLoaderInstance.WebServerListenPort),
+		Addr:    fmt.Sprintf(":%d", config.EnvLoaderInstance.WebServerListenPort),
 		Handler: router,
 	}
 	go func() {
@@ -293,7 +293,7 @@ func Main() {
 		if err != nil {
 			logger.Panicf("failed to start self gin server: %s", err)
 		}
-		fmt.Printf("start fabric server on port %d successfully\n", variables.EnvLoaderInstance.WebServerListenPort)
+		fmt.Printf("start fabric server on port %d successfully\n", config.EnvLoaderInstance.WebServerListenPort)
 	}()
 	defer func() {
 		err = fabricServer.Shutdown(context.Background())

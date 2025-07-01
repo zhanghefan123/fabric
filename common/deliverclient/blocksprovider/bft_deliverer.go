@@ -122,6 +122,9 @@ func (d *BFTDeliverer) Initialize(channelConfig *common.Config, selfEndpoint str
 		d.Logger.Panicf("Bundle creation should not have failed: %s", err)
 	}
 	ordererSource.Update(globalAddresses, orgAddresses)
+	// zhf add code globalAddresses and orgAddresses
+	// fmt.Printf("globalAddresses: %v\n", globalAddresses)
+	// fmt.Printf("orgAddresses: %v\n", orgAddresses)
 	d.orderers = ordererSource
 }
 
@@ -134,6 +137,79 @@ func (d *BFTDeliverer) BlockProgress() (uint64, time.Time) {
 	}
 
 	return d.nextBlockNumber - 1, d.lastBlockTime
+}
+
+// DeliverBlocksMalicious zhf add code 恶意的进行区块的获取
+func (d *BFTDeliverer) DeliverBlocksMalicious(leader uint64) {
+	fmt.Println("test")
+	//if err := d.initDeliverBlocks(); err != nil {
+	//	d.Logger.Errorf("Failed to start DeliverBlocks: %s", err)
+	//	return
+	//}
+	//
+	//defer func() {
+	//	d.mutex.Lock()
+	//	defer d.mutex.Unlock()
+	//
+	//	d.Logger.Infof("Stopping to DeliverBlocks on channel `%s`, block height=%d", d.ChannelID, d.nextBlockNumber)
+	//}()
+	//
+	//timeoutConfig := TimeoutConfig{
+	//	MinRetryInterval:       d.InitialRetryInterval,
+	//	MaxRetryInterval:       d.MaxRetryInterval,
+	//	BlockCensorshipTimeout: d.BlockCensorshipTimeout,
+	//}
+	//
+	//// Refresh and randomize the sources, selects a random initial source, and incurs a random iteration order.
+	//d.refreshSources()
+	//
+	//for {
+	//	// Compute the backoff duration and wait before retrying.
+	//	// The backoff duration is doubled with every failed round.
+	//	// A failed round is when we had moved through all the endpoints without success.
+	//	// If we get a block successfully from a source, or endpoints are refreshed, the failure count is reset.
+	//	// 计算退避时间并等待重试, 每次失败，退避持续时间都会加倍,失败的回合是指我们遍历所有端点但都没有成功, 如果我们成功的从源获取一个块
+	//	// 那么失败计数将被重置
+	//	if stopLoop := d.retryBackoff(); stopLoop {
+	//		break
+	//	}
+	//
+	//	// No endpoints is a non-recoverable error, as new endpoints are a result of fetching new blocks from an orderer.
+	//	// 没有可供拉取区块的节点
+	//	//if len(d.fetchSources) == 0 {
+	//	//	d.Logger.Error("Failure in DeliverBlocks, no orderer endpoints, something is critically wrong")
+	//	//	break
+	//	//}
+	//
+	//	// Start a block fetcher; a buffered channel so that the fetcher goroutine can send an error and exit w/o
+	//	// waiting for it to be consumed. A block receiver is created within.
+	//	d.fetchErrorsC = make(chan error, 1)
+	//	// 取一个源
+	//	//source := leader
+	//	// 进行区块的拉取
+	//	go d.FetchBlocks(d.fetchSources[d.fetchSourceIndex])
+	//
+	//	// Create and start a censorship monitor.
+	//	d.censorshipMonitor = d.CensorshipDetectorFactory.Create(
+	//		d.ChannelID, d.UpdatableBlockVerifier, d.requester, d, d.fetchSources, d.fetchSourceIndex, timeoutConfig)
+	//	go d.censorshipMonitor.Monitor()
+	//
+	//	// Wait for block fetcher & censorship monitor events, or a stop signal.
+	//	// Events which cause a retry return nil, non-recoverable errors return an error.
+	//	if stopLoop := d.handleFetchAndCensorshipEvents(); stopLoop {
+	//		break
+	//	}
+	//
+	//	d.censorshipMonitor.Stop()
+	//}
+	//
+	//// Clean up everything because we are closing
+	//d.mutex.Lock()
+	//defer d.mutex.Unlock()
+	//d.blockReceiver.Stop()
+	//if d.censorshipMonitor != nil {
+	//	d.censorshipMonitor.Stop()
+	//}
 }
 
 func (d *BFTDeliverer) DeliverBlocks() {

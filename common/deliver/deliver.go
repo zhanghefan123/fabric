@@ -341,6 +341,7 @@ func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.E
 		}
 
 		signedData := &protoutil.SignedData{Data: envelope.Payload, Identity: shdr.Creator, Signature: envelope.Signature}
+		// zhf add code: SendBlockResponse 如果不能及时的进行发送的话
 		if err := srv.SendBlockResponse(block2send, chdr.ChannelId, chain, signedData); err != nil {
 			logger.Warningf("[channel: %s] Error sending to %s: %s", chdr.ChannelId, addr, err)
 			return cb.Status_INTERNAL_SERVER_ERROR, err

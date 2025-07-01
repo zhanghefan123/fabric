@@ -2,14 +2,14 @@ package info
 
 import (
 	"fmt"
-	"github.com/hyperledger/fabric/zeusnet/variables"
+	"github.com/hyperledger/fabric/zeusnet/modules/config"
 	"os"
 )
 
 func WriteBlockHeight(height uint64) (err error) {
 	// 文件 handle 和 错误
 	var file *os.File
-	filePath := fmt.Sprintf("/configuration/%s/block_height.stat", variables.EnvLoaderInstance.ContainerName)
+	filePath := fmt.Sprintf("/configuration/%s/block_height.stat", config.EnvLoaderInstance.ContainerName)
 	// 为文件 handle 赋值
 	file, err = os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0666)
 	defer func() {

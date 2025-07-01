@@ -86,6 +86,48 @@ func (s *BFTSynchronizer) Buffer() *SyncBuffer {
 	return s.syncBuff
 }
 
+// MaliciousSynchronize 恶意的同步
+func (s *BFTSynchronizer) MaliciousSynchronize() error {
+	//// === We probe all the endpoints and establish a target height, as well as detect the self endpoint.
+	//targetHeight, myEndpoint, err := s.detectTargetHeight()
+	//if err != nil {
+	//	return errors.Wrapf(err, "cannot get detect target height")
+	//}
+	//
+	//var fasifiedHeight uint64 = 0
+	//// === Create a buffer to accept the blocks delivered from the BFTDeliverer.
+	//// 计算能够存储的最大的能够缓存的区块的数量
+	//capacityBlocks := uint(s.LocalConfigCluster.ReplicationBufferSize) / uint(s.Support.SharedConfig().BatchSize().AbsoluteMaxBytes)
+	//// 如果能够缓存的区块数量 < 100, 那么至少设置为 100
+	//if capacityBlocks < 100 {
+	//	capacityBlocks = 100
+	//}
+	//s.mutex.Lock()
+	//s.syncBuff = NewSyncBuffer(capacityBlocks)
+	//s.mutex.Unlock()
+	//
+	//// === Create the BFT block deliverer and start a go-routine that fetches block and inserts them into the syncBuffer.
+	//// 创建 BFT block deliver 并且启动一个 goroutine 来将获取到的 blocks 放到  syncBuffer 之中
+	//// 假设在 startHeight 处每次填写0的话, 然后每次向主节点进行区块同步
+	//bftDeliverer, err := s.createBFTDeliverer(fasifiedHeight, myEndpoint)
+	//if err != nil {
+	//	return errors.Wrapf(err, "cannot create BFT block deliverer")
+	//}
+	//
+	//go bftDeliverer.DeliverBlocks()
+	//defer bftDeliverer.Stop()
+	//
+	//// === Loop on sync-buffer and pull blocks, writing them to the ledger, returning the last block pulled.
+	//lastPulledBlock, err := s.getBlocksFromSyncBufferMalicious(fasifiedHeight, targetHeight)
+	//if err != nil {
+	//	return errors.Wrapf(err, "failed to get any blocks from SyncBuffer")
+	//}
+	//
+	//// zhf add code 打印最后拉取的区块
+	//fmt.Printf("last pulled block's heigth = %d\n", lastPulledBlock.Header.Number)
+	return nil
+}
+
 func (s *BFTSynchronizer) synchronize() (*types.Decision, error) {
 	fmt.Println("zhf add code: synchronize")
 
@@ -116,6 +158,8 @@ func (s *BFTSynchronizer) synchronize() (*types.Decision, error) {
 
 	// === Create the BFT block deliverer and start a go-routine that fetches block and inserts them into the syncBuffer.
 	// 创建 BFT block deliver 并且启动一个 goroutine 来将获取到的 blocks 放到  syncBuffer 之中
+	// 假设在 startHeight 处每次填写0的话, 然后每次向主节点进行区块同步
+	//fmt.Println("zhf add code: createBFTDeliverer")
 	bftDeliverer, err := s.createBFTDeliverer(startHeight, myEndpoint)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot create BFT block deliverer")
@@ -255,6 +299,23 @@ func (s *BFTSynchronizer) createBFTDeliverer(startHeight uint64, myEndpoint stri
 	bftDeliverer.Initialize(lastConfigEnv.GetConfig(), myEndpoint)
 
 	return bftDeliverer, nil
+}
+
+// zhf add code getBlocksFromSyncBufferMalicious 在恶意攻击的时候不用对区块进行任何处理
+func (s *BFTSynchronizer) getBlocksFromSyncBufferMalicious(startHeight, targetHeight uint64) (*common.Block, error) {
+	targetSeq := targetHeight - 1
+	seq := startHeight
+	var blocksFetched int
+	var lastPulledBlock *common.Block
+	for seq <= targetSeq {
+		// 从 syncBuffer 之中取出区块
+		block := s.syncBuff.PullBlock(seq)
+		lastPulledBlock = block
+		seq++
+		blocksFetched++
+	}
+	s.syncBuff.Stop()
+	return lastPulledBlock, nil
 }
 
 func (s *BFTSynchronizer) getBlocksFromSyncBuffer(startHeight, targetHeight uint64) (*common.Block, error) {

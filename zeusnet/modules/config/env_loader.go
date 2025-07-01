@@ -2,8 +2,16 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
+	"strings"
+)
+
+var (
+	EnvLoaderInstance = &EnvLoader{
+		IdToAddressMapping: make(map[uint64]string),
+	}
 )
 
 type EnvLoader struct {
@@ -14,6 +22,7 @@ type EnvLoader struct {
 	WebServerListenPort          int
 	EnableRoutine                bool
 	EnableAdvancedMessageHandler bool
+	IdToAddressMapping           map[uint64]string
 }
 
 // LoadEnv 进行环境变量的加载
@@ -31,6 +40,38 @@ func (envLoader *EnvLoader) LoadEnv() error {
 	envLoader.EnableAdvancedMessageHandler, err = strconv.ParseBool(os.Getenv("ENABLE_ADVANCED_MESSAGE_HANDLER"))
 	if err != nil {
 		return fmt.Errorf("parse ENABLE_ROUTINE error %v", err)
+	}
+	err = envLoader.ReadIdToAddressMapping()
+	if err != nil {
+		return fmt.Errorf("read id to address mapping failed %v", err)
+	}
+	return nil
+}
+
+func (envLoader *EnvLoader) ReadIdToAddressMapping() error {
+	filePath := fmt.Sprintf("/configuration/%s/fabric/fabric_id_to_address.conf", EnvLoaderInstance.ContainerName)
+	file, err := os.Open(filePath)
+	defer func() {
+		errClose := file.Close()
+		if err == nil {
+			err = errClose
+		}
+	}()
+	if err != nil {
+		return fmt.Errorf("open file failed: %w", err)
+	}
+	bytesContent, err := io.ReadAll(file)
+
+	mappings := strings.Split(string(bytesContent), "\n")
+	for _, mapping := range mappings {
+		var nodeId uint64
+		result := strings.Split(mapping, ",")
+		nodeId, err = strconv.ParseUint(result[0], 10, 64)
+		if err != nil {
+			return fmt.Errorf("parse index to uint failed")
+		}
+		address := result[1]
+		envLoader.IdToAddressMapping[nodeId] = address
 	}
 	return nil
 }

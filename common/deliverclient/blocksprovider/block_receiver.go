@@ -134,7 +134,7 @@ func (br *BlockReceiver) processMsg(msg *orderer.DeliverResponse) (uint64, *comm
 		}
 
 		return 0, nil, errors.Errorf("received bad status %v from orderer", t.Status)
-	// 如果收到的是响应的去亏啊
+	// 如果收到的是响应的区块
 	case *orderer.DeliverResponse_Block:
 		blockNum := t.Block.Header.Number
 		// 验证区块
@@ -166,6 +166,8 @@ func (br *BlockReceiver) processMsg(msg *orderer.DeliverResponse) (uint64, *comm
 			}
 			br.logger.Infof("Updated config block %d", blockNum)
 		}
+
+		// 一般的情况下肯定是其他的块
 
 		br.updatableBlockVerifier.UpdateBlockHeader(t.Block)
 
