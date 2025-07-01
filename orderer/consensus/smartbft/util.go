@@ -571,5 +571,6 @@ func (*bftDelivererCreator) CreateBFTDeliverer(
 type BFTBlockDeliverer interface {
 	Stop()
 	DeliverBlocks()
+	MaliciousDeliverBlocks(falsifiedHeight uint64)
 	Initialize(channelConfig *cb.Config, selfEndpoint string)
 }

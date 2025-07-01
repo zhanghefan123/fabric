@@ -190,6 +190,16 @@ func (c *Controller) StopAttackLeader() error {
 	return nil
 }
 
+// StartMaliciousSynchronize 开始进行恶意的同步
+func (c *Controller) StartMaliciousSynchronize() error {
+	err := c.Synchronizer.MaliciousSync()
+	if err != nil {
+		return fmt.Errorf("c.Synchronizer.MaliciousSync failed due to %v", err)
+	} else {
+		return nil
+	}
+}
+
 func (c *Controller) blacklist() []uint64 {
 	prop, _ := c.Checkpoint.Get()
 	md := &protos.ViewMetadata{}

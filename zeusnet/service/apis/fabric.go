@@ -34,6 +34,7 @@ func StopFabric(c *gin.Context) {
 	})
 }
 
+// StartAttack 开启攻击
 func StartAttack(c *gin.Context) {
 	err := bft_related.ConsensusController.StartAttackLeader()
 	if err != nil {
@@ -48,6 +49,7 @@ func StartAttack(c *gin.Context) {
 	}
 }
 
+// StopAttack 停止攻击
 func StopAttack(c *gin.Context) {
 	err := bft_related.ConsensusController.StopAttackLeader()
 	if err != nil {
@@ -57,6 +59,20 @@ func StopAttack(c *gin.Context) {
 	} else {
 		c.JSON(200, gin.H{
 			"message": "successfully stop insider attack",
+		})
+	}
+}
+
+// StartMaliciousSynchronize 向恶意节点进行同步的发起
+func StartMaliciousSynchronize(c *gin.Context) {
+	err := bft_related.ConsensusController.StartMaliciousSynchronize()
+	if err != nil {
+		c.JSON(500, gin.H{
+			"message": fmt.Errorf("start malicious synchronize failed: %v", err),
+		})
+	} else {
+		c.JSON(200, gin.H{
+			"message": "start malicious synchronize successful",
 		})
 	}
 }

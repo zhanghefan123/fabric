@@ -39,6 +39,10 @@ func (_m *Synchronizer) Sync() types.SyncResponse {
 	return r0
 }
 
+func (_m *Synchronizer) MaliciousSync() error {
+	panic("implement me")
+}
+
 // Synchronizer_Sync_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Sync'
 type Synchronizer_Sync_Call struct {
 	*mock.Call

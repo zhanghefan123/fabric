@@ -68,6 +68,10 @@ func (s *Synchronizer) Sync() types.SyncResponse {
 	}
 }
 
+func (s *Synchronizer) MaliciousSync() error {
+	panic("implement me")
+}
+
 func (s *Synchronizer) getViewMetadataLastConfigSqnFromBlock(block *cb.Block) (*smartbftprotos.ViewMetadata, uint64) {
 	viewMetadata, err := getViewMetadataFromBlock(block)
 	if err != nil {

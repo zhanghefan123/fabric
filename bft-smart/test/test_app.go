@@ -126,6 +126,10 @@ func (a *App) Sync() types.SyncResponse {
 	return types.SyncResponse{Latest: *a.lastDecision, Reconfig: reconfigSync}
 }
 
+func (a *App) MaliciousSync() error {
+	panic("implement me")
+}
+
 // Restart restarts the node
 func (a *App) Restart() {
 	a.RestartSync(true)

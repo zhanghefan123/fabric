@@ -49,6 +49,10 @@ func (*Node) Sync() bft.SyncResponse {
 	panic("implement me")
 }
 
+func (*Node) MaliciousSync() error {
+	panic("implement me")
+}
+
 func (*Node) AuxiliaryData(_ []byte) []byte {
 	return nil
 }

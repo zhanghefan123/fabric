@@ -102,6 +102,12 @@ func (c *Consensus) Sync() types.SyncResponse {
 	return syncResponse
 }
 
+// MaliciousSync zhf add code  controller.Synchronizer.MaliciousSync() 调用到了这里
+func (c *Consensus) MaliciousSync() error {
+	_ = c.Synchronizer.MaliciousSync()
+	return nil
+}
+
 // GetLeaderID returns the current leader ID or zero if Consensus is not running
 func (c *Consensus) GetLeaderID() uint64 {
 	if atomic.LoadUint64(&c.running) == 0 {

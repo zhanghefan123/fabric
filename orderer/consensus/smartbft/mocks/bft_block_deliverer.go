@@ -27,6 +27,10 @@ type BFTBlockDeliverer struct {
 	invocationsMutex sync.RWMutex
 }
 
+func (fake *BFTBlockDeliverer) MaliciousDeliverBlocks(uint64) {
+	panic("implement me")
+}
+
 func (fake *BFTBlockDeliverer) DeliverBlocks() {
 	fake.deliverBlocksMutex.Lock()
 	fake.deliverBlocksArgsForCall = append(fake.deliverBlocksArgsForCall, struct {

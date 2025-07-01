@@ -48,8 +48,11 @@ type BlockReceiver struct {
 // Start starts a goroutine that continuously receives blocks.
 func (br *BlockReceiver) Start() {
 	br.logger.Infof("BlockReceiver starting")
+	count := 0
 	go func() {
 		for {
+			fmt.Printf("br.deliverClient.Recv() %d br.recvC cap = %d\n", count, cap(br.recvC))
+			count += 1
 			resp, err := br.deliverClient.Recv()
 			if err != nil {
 				br.logger.Warningf("Encountered an error reading from deliver stream: %s", err)
@@ -85,6 +88,41 @@ func (br *BlockReceiver) Stop() {
 	br.logger.Infof("BlockReceiver stopped")
 }
 
+// MaliciousProcessIncoming 恶意的进行消息的处理
+func (br *BlockReceiver) MaliciousProcessIncoming(onSuccess func(blockNum uint64, channelConfig *common.Config)) error {
+	var err error
+
+RecvLoop: // Loop until the endpoint is refreshed, or there is an error on the connection
+	for {
+		select {
+		case <-br.endpoint.Refreshed:
+			br.logger.Infof("Ordering endpoints have been refreshed, disconnecting from deliver to reconnect using updated endpoints")
+			err = &errRefreshEndpoint{message: fmt.Sprintf("orderer endpoint `%s` has been refreshed, ", br.endpoint.Address)}
+			break RecvLoop
+		case response, ok := <-br.recvC:
+			if !ok {
+				br.logger.Warningf("Orderer hung up without sending status")
+				err = errors.Errorf("orderer `%s` hung up without sending status", br.endpoint.Address)
+				break RecvLoop
+			}
+			var blockNum uint64
+			var channelConfig *common.Config
+			blockNum, channelConfig, err = br.MaliciousProcessMsg(response)
+			onSuccess(blockNum, channelConfig)
+		case <-br.stopC:
+			br.logger.Infof("BlockReceiver got a signal to stop")
+			err = &ErrStopping{Message: "got a signal to stop"}
+			break RecvLoop
+		}
+	}
+
+	// cancel the sending side and wait for the `Start` goroutine to exit
+	br.cancelSendFunc()
+	<-br.recvC
+
+	return err
+}
+
 // ProcessIncoming processes incoming messages until stopped or encounters an error.
 func (br *BlockReceiver) ProcessIncoming(onSuccess func(blockNum uint64, channelConfig *common.Config)) error {
 	var err error
@@ -105,7 +143,12 @@ RecvLoop: // Loop until the endpoint is refreshed, or there is an error on the c
 			var blockNum uint64
 			var channelConfig *common.Config
 			// BlockReceiver processMsg
+			// original code
+			// ---------------------------------------------------
 			blockNum, channelConfig, err = br.processMsg(response)
+			// zhf add code
+			// blockNum = br.MaliciousProcessMsg(response)
+			// ---------------------------------------------------
 			if err != nil {
 				br.logger.Warningf("Got error while attempting to receive blocks: %v", err)
 				err = errors.WithMessagef(err, "got error while attempting to receive blocks from orderer `%s`", br.endpoint.Address)
@@ -126,7 +169,7 @@ RecvLoop: // Loop until the endpoint is refreshed, or there is an error on the c
 	return err
 }
 
-func (br *BlockReceiver) processMsg(msg *orderer.DeliverResponse) (uint64, *common.Config, error) {
+func (br *BlockReceiver) MaliciousProcessMsg(msg *orderer.DeliverResponse) (uint64, *common.Config, error) {
 	switch t := msg.GetType().(type) {
 	case *orderer.DeliverResponse_Status:
 		if t.Status == common.Status_SUCCESS {
@@ -138,9 +181,12 @@ func (br *BlockReceiver) processMsg(msg *orderer.DeliverResponse) (uint64, *comm
 	case *orderer.DeliverResponse_Block:
 		blockNum := t.Block.Header.Number
 		// 验证区块
-		if err := br.updatableBlockVerifier.VerifyBlock(t.Block); err != nil {
-			return 0, nil, errors.WithMessagef(err, "block [%d] from orderer [%s] could not be verified", blockNum, br.endpoint.String())
-		}
+		// original code
+		// --------------------------------------------
+		//if err := br.updatableBlockVerifier.VerifyBlock(t.Block); err != nil {
+		//	return 0, nil, errors.WithMessagef(err, "block [%d] from orderer [%s] could not be verified", blockNum, br.endpoint.String())
+		//}
+		// --------------------------------------------
 		// 处理区块
 		err := br.blockHandler.HandleBlock(br.channelID, t.Block)
 		if err != nil {
@@ -168,7 +214,59 @@ func (br *BlockReceiver) processMsg(msg *orderer.DeliverResponse) (uint64, *comm
 		}
 
 		// 一般的情况下肯定是其他的块
+		br.updatableBlockVerifier.UpdateBlockHeader(t.Block)
 
+		return blockNum, channelConfig, nil
+	default:
+		return 0, nil, errors.Errorf("unknown message type: %T, message: %+v", t, msg)
+	}
+}
+
+func (br *BlockReceiver) processMsg(msg *orderer.DeliverResponse) (uint64, *common.Config, error) {
+	switch t := msg.GetType().(type) {
+	case *orderer.DeliverResponse_Status:
+		if t.Status == common.Status_SUCCESS {
+			return 0, nil, errors.Errorf("received success for a seek that should never complete")
+		}
+
+		return 0, nil, errors.Errorf("received bad status %v from orderer", t.Status)
+	// 如果收到的是响应的区块
+	case *orderer.DeliverResponse_Block:
+		blockNum := t.Block.Header.Number
+		// 验证区块
+		// original code
+		// --------------------------------------------
+		if err := br.updatableBlockVerifier.VerifyBlock(t.Block); err != nil {
+			return 0, nil, errors.WithMessagef(err, "block [%d] from orderer [%s] could not be verified", blockNum, br.endpoint.String())
+		}
+		// --------------------------------------------
+		// 处理区块
+		err := br.blockHandler.HandleBlock(br.channelID, t.Block)
+		if err != nil {
+			return 0, nil, errors.WithMessagef(err, "block [%d] from orderer [%s] could not be handled", blockNum, br.endpoint.String())
+		}
+
+		br.logger.Debugf("Handled block %d", blockNum)
+
+		var channelConfig *common.Config
+
+		// 如果是配置块
+		if protoutil.IsConfigBlock(t.Block) {
+			configEnv, err := deliverclient.ConfigFromBlock(t.Block)
+			if err != nil {
+				return 0, nil, errors.WithMessagef(err, "failed to extract channel-config from config block [%d] from orderer [%s]", blockNum, br.endpoint.String())
+			}
+
+			channelConfig = configEnv.GetConfig()
+			br.logger.Debugf("channel config: %+v", channelConfig)
+
+			if err := br.updatableBlockVerifier.UpdateConfig(t.Block); err != nil {
+				return 0, nil, errors.WithMessagef(err, "config block [%d] from orderer [%s] failed to update block verifier", blockNum, br.endpoint.String())
+			}
+			br.logger.Infof("Updated config block %d", blockNum)
+		}
+
+		// 一般的情况下肯定是其他的块
 		br.updatableBlockVerifier.UpdateBlockHeader(t.Block)
 
 		return blockNum, channelConfig, nil
