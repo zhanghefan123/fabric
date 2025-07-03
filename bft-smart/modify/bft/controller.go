@@ -7,6 +7,7 @@ package bft
 
 import (
 	"fmt"
+	"github.com/hyperledger/fabric/zeusnet/modules/config"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -446,8 +447,7 @@ func (c *Controller) StopHandleMessageFromQueues() {
 	c.abortHandleChannel <- struct{}{}
 }
 
-// ProcessMessages zhf add code dispatches the incoming message to the required component
-func (c *Controller) ProcessMessages(sender uint64, m *protos.Message) {
+func (c *Controller) AdvancedProcessMessages(sender uint64, m *protos.Message) {
 	c.Logger.Debugf("%d got message from %d: %s", c.ID, sender, MsgToString(m))
 	// zhf add code 进行实时的消息的记录
 	// -------------------------
@@ -460,6 +460,40 @@ func (c *Controller) ProcessMessages(sender uint64, m *protos.Message) {
 		c.validatorToMsgQueue[sender] <- m
 	}
 	// -------------------------
+}
+
+func (c *Controller) OriginalProcessMessages(sender uint64, m *protos.Message) {
+	c.Logger.Debugf("%d got message from %d: %s", c.ID, sender, MsgToString(m))
+	switch m.GetContent().(type) {
+	case *protos.Message_PrePrepare, *protos.Message_Prepare, *protos.Message_Commit:
+		c.currViewLock.RLock()
+		view := c.currView
+		c.currViewLock.RUnlock()
+		view.HandleMessage(sender, m)
+		c.ViewChanger.HandleViewMessage(sender, m)
+		if sender == c.leaderID() {
+			c.LeaderMonitor.InjectArtificialHeartbeat(sender, c.convertViewMessageToHeartbeat(m))
+		}
+	case *protos.Message_ViewChange, *protos.Message_ViewData, *protos.Message_NewView:
+		c.ViewChanger.HandleMessage(sender, m)
+	case *protos.Message_HeartBeat, *protos.Message_HeartBeatResponse:
+		c.LeaderMonitor.ProcessMsg(sender, m)
+	case *protos.Message_StateTransferRequest:
+		c.respondToStateTransferRequest(sender)
+	case *protos.Message_StateTransferResponse:
+		c.Collector.HandleMessage(sender, m)
+	default:
+		c.Logger.Warnf("Unexpected message type, ignoring")
+	}
+}
+
+// ProcessMessages zhf add code dispatches the incoming message to the required component
+func (c *Controller) ProcessMessages(sender uint64, m *protos.Message) {
+	if config.EnvLoaderInstance.EnableAdvancedMessageHandler {
+		c.AdvancedProcessMessages(sender, m)
+	} else {
+		c.OriginalProcessMessages(sender, m)
+	}
 }
 
 // SpeedAndSender zhf add code Speed and Sender 结构体
@@ -1044,7 +1078,9 @@ func (c *Controller) Start(startViewNumber uint64, startProposalSequence uint64,
 	}
 	fmt.Println("v.StartPrintMessageReceiveSpeedPeriodically")
 	go c.StartPrintMessageReceiveSpeedPeriodically()
-	go c.StartHandleMessageFromQueues()
+	if config.EnvLoaderInstance.EnableAdvancedMessageHandler {
+		go c.StartHandleMessageFromQueues()
+	}
 	// ---------------------------------------------
 
 	go func() {

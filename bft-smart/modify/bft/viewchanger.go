@@ -434,6 +434,7 @@ func (v *ViewChanger) prepareViewDataMsg() *protos.Message {
 	lastDecision, lastDecisionSignatures := v.Checkpoint.Get()
 	inFlight := v.getInFlight(lastDecision)
 	prepared := v.InFlight.IsInFlightPrepared()
+	// zhf add code: 将最后做出的决定向其他节点进行发送
 	vd := &protos.ViewData{
 		NextView:               v.currView,
 		LastDecision:           lastDecision,
