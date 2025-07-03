@@ -26,6 +26,10 @@ func (_m *SynchronizerMock) Sync() types.SyncResponse {
 	return r0
 }
 
-func (_m *SynchronizerMock) MaliciousSync() error {
+func (_m *SynchronizerMock) StartMaliciousSync() error {
+	panic("implement me")
+}
+
+func (_m *SynchronizerMock) StopMaliciousSync() error {
 	panic("implement me")
 }

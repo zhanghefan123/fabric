@@ -101,7 +101,8 @@ type Synchronizer interface {
 	// Sync blocks indefinitely until the replica's state is synchronized to the latest decision,
 	// and returns it with info about reconfiguration.
 	Sync() bft.SyncResponse
-	MaliciousSync() error
+	StartMaliciousSync() error
+	StopMaliciousSync() error
 }
 
 // Logger defines the contract for logging.

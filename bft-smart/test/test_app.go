@@ -126,7 +126,11 @@ func (a *App) Sync() types.SyncResponse {
 	return types.SyncResponse{Latest: *a.lastDecision, Reconfig: reconfigSync}
 }
 
-func (a *App) MaliciousSync() error {
+func (a *App) StartMaliciousSync() error {
+	panic("implement me")
+}
+
+func (a *App) StopMaliciousSync() error {
 	panic("implement me")
 }
 

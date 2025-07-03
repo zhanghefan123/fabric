@@ -39,7 +39,11 @@ func (_m *Synchronizer) Sync() types.SyncResponse {
 	return r0
 }
 
-func (_m *Synchronizer) MaliciousSync() error {
+func (_m *Synchronizer) StartMaliciousSync() error {
+	panic("implement me")
+}
+
+func (_m *Synchronizer) StopMaliciousSync() error {
 	panic("implement me")
 }
 

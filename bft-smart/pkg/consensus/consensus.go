@@ -102,9 +102,14 @@ func (c *Consensus) Sync() types.SyncResponse {
 	return syncResponse
 }
 
-// MaliciousSync zhf add code  controller.Synchronizer.MaliciousSync() 调用到了这里
-func (c *Consensus) MaliciousSync() error {
-	_ = c.Synchronizer.MaliciousSync()
+// StartMaliciousSync zhf add code  controller.Synchronizer.StartMaliciousSync() 调用到了这里
+func (c *Consensus) StartMaliciousSync() error {
+	_ = c.Synchronizer.StartMaliciousSync()
+	return nil
+}
+
+func (c *Consensus) StopMaliciousSync() error {
+	_ = c.Synchronizer.StopMaliciousSync()
 	return nil
 }
 

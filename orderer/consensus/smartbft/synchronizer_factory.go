@@ -79,14 +79,15 @@ func newSynchronizer(
 				pruneCommittedRequests(block)
 				return updateRuntimeConfig(block)
 			},
-			Support:             support,
-			CryptoProvider:      bccsp,
-			ClusterDialer:       clusterDialer,
-			LocalConfigCluster:  localConfigCluster,
-			BlockPullerFactory:  &blockPullerCreator{},
-			VerifierFactory:     &verifierCreator{},
-			BFTDelivererFactory: &bftDelivererCreator{},
-			Logger:              logger,
+			Support:                    support,
+			CryptoProvider:             bccsp,
+			ClusterDialer:              clusterDialer,
+			LocalConfigCluster:         localConfigCluster,
+			BlockPullerFactory:         &blockPullerCreator{},
+			VerifierFactory:            &verifierCreator{},
+			BFTDelivererFactory:        &bftDelivererCreator{},
+			Logger:                     logger,
+			StopMaliciousAttackChannel: make(chan struct{}), // zhf add code
 		}
 	case "simple":
 		logger.Debug("Creating simple Synchronizer")

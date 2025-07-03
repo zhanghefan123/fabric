@@ -10,8 +10,10 @@ package deliver
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
+	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -197,14 +199,18 @@ func isFiltered(srv *Server) bool {
 	return false
 }
 
+// deliverBlocks 向请求方不断的进行 blocks 的发送
 func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.Envelope) (status cb.Status, err error) {
+	fmt.Println("zhf add code: deliver blocks")
+	debug.PrintStack()
+
 	addr := util.ExtractRemoteAddress(ctx)
 	payload, chdr, shdr, err := h.parseEnvelope(ctx, envelope)
 	if err != nil {
 		logger.Warningf("error parsing envelope from %s: %s", addr, err)
 		return cb.Status_BAD_REQUEST, nil
 	}
-
+	// 进行 chain 的获取
 	chain := h.ChainManager.GetChain(chdr.ChannelId)
 	if chain == nil {
 		// Note, we log this at DEBUG because SDKs will poll waiting for channels to be created

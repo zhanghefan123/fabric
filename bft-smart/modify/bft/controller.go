@@ -192,9 +192,19 @@ func (c *Controller) StopAttackLeader() error {
 
 // StartMaliciousSynchronize 开始进行恶意的同步
 func (c *Controller) StartMaliciousSynchronize() error {
-	err := c.Synchronizer.MaliciousSync()
+	err := c.Synchronizer.StartMaliciousSync()
 	if err != nil {
-		return fmt.Errorf("c.Synchronizer.MaliciousSync failed due to %v", err)
+		return fmt.Errorf("c.Synchronizer.StartMaliciousSync failed due to %v", err)
+	} else {
+		return nil
+	}
+}
+
+// StopMaliciousSynchronize 停止进行恶意同步
+func (c *Controller) StopMaliciousSynchronize() error {
+	err := c.Synchronizer.StopMaliciousSync()
+	if err != nil {
+		return fmt.Errorf("c.Synchronizer.StopMaliciousSync failed due to %v", err)
 	} else {
 		return nil
 	}

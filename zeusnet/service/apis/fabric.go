@@ -63,12 +63,27 @@ func StopAttack(c *gin.Context) {
 	}
 }
 
-// StartMaliciousSynchronize 向恶意节点进行同步的发起
+// StartMaliciousSynchronize 开始向主节点进行恶意同步
 func StartMaliciousSynchronize(c *gin.Context) {
 	err := bft_related.ConsensusController.StartMaliciousSynchronize()
 	if err != nil {
 		c.JSON(500, gin.H{
 			"message": fmt.Errorf("start malicious synchronize failed: %v", err),
+		})
+	} else {
+		c.JSON(200, gin.H{
+			"message": "start malicious synchronize successful",
+		})
+	}
+}
+
+// StopMaliciousSynchronize 停止向主节点进行恶意同步
+func StopMaliciousSynchronize(c *gin.Context) {
+	fmt.Println("stop malicious synchronize")
+	err := bft_related.ConsensusController.StopMaliciousSynchronize()
+	if err != nil {
+		c.JSON(500, gin.H{
+			"message": fmt.Errorf("stop malicious synchronize failed: %v", err),
 		})
 	} else {
 		c.JSON(200, gin.H{

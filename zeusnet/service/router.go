@@ -10,6 +10,7 @@ var postRoutes = map[string]gin.HandlerFunc{
 	"/start_attack":                apis.StartAttack,               // 向 leader 发起攻击, 进行消息的重放
 	"/stop_attack":                 apis.StopAttack,                // 停止向 leader 发起攻击
 	"/start_malicious_synchronize": apis.StartMaliciousSynchronize, // 向主节点进行恶意的区块同步
+	"/stop_malicious_synchronize":  apis.StopMaliciousSynchronize,  // 停止向主节点进行恶意的区块同步
 }
 
 // CORSMiddleware 中间件处理跨域问题

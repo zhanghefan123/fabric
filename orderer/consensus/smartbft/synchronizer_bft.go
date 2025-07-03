@@ -9,9 +9,9 @@ package smartbft
 import (
 	"fmt"
 	"github.com/hyperledger/fabric/protoutil"
-	"github.com/hyperledger/fabric/zeusnet/bft_related"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hyperledger-labs/SmartBFT/pkg/types"
@@ -28,19 +28,20 @@ import (
 )
 
 type BFTSynchronizer struct {
-	lastReconfig        types.Reconfig
-	selfID              uint64
-	LatestConfig        func() (types.Configuration, []uint64)
-	BlockToDecision     func(*common.Block) *types.Decision
-	OnCommit            func(*common.Block) types.Reconfig
-	Support             consensus.ConsenterSupport
-	CryptoProvider      bccsp.BCCSP
-	ClusterDialer       *cluster.PredicateDialer
-	LocalConfigCluster  localconfig.Cluster
-	BlockPullerFactory  BlockPullerFactory
-	VerifierFactory     VerifierFactory
-	BFTDelivererFactory BFTDelivererFactory
-	Logger              *flogging.FabricLogger
+	lastReconfig               types.Reconfig
+	selfID                     uint64
+	LatestConfig               func() (types.Configuration, []uint64)
+	BlockToDecision            func(*common.Block) *types.Decision
+	OnCommit                   func(*common.Block) types.Reconfig
+	Support                    consensus.ConsenterSupport
+	CryptoProvider             bccsp.BCCSP
+	ClusterDialer              *cluster.PredicateDialer
+	LocalConfigCluster         localconfig.Cluster
+	BlockPullerFactory         BlockPullerFactory
+	VerifierFactory            VerifierFactory
+	BFTDelivererFactory        BFTDelivererFactory
+	Logger                     *flogging.FabricLogger
+	StopMaliciousAttackChannel chan struct{} // zhf add code
 
 	mutex    sync.Mutex
 	syncBuff *SyncBuffer
@@ -79,15 +80,40 @@ func (s *BFTSynchronizer) Sync() types.SyncResponse {
 	}
 }
 
-func (s *BFTSynchronizer) MaliciousSync() error {
+// StartMaliciousSync MaliciousSync zhf add code 向主节点进行恶意的区块同步拉取
+func (s *BFTSynchronizer) StartMaliciousSync() error {
 	s.Logger.Debug("BFT Sync initiated")
-	_ = s.MaliciousSynchronize()
-	// After sync has ended, reset the state of the last reconfig.
-	defer func() {
-		s.lastReconfig = types.Reconfig{}
+	// 同步攻击入口
+	go func() {
+		var counter int32 = 0
+	Loop:
+		for {
+			select {
+			case <-s.StopMaliciousAttackChannel:
+				break Loop
+			default:
+				if atomic.LoadInt32(&counter) < 10 {
+					go func() {
+						atomic.AddInt32(&counter, 1)
+						defer atomic.AddInt32(&counter, -1)
+						err := s.MaliciousSynchronize()
+						if err != nil {
+							fmt.Printf("Malicious Synchronize error due to %v", err)
+						}
+					}()
+				} else {
+					continue
+				}
+			}
+		}
 	}()
+	return nil
+}
 
-	s.Logger.Debugf("reconfig: %+v", s.lastReconfig)
+func (s *BFTSynchronizer) StopMaliciousSync() error {
+	if len(s.StopMaliciousAttackChannel) == 0 {
+		s.StopMaliciousAttackChannel <- struct{}{}
+	}
 	return nil
 }
 
@@ -101,8 +127,6 @@ func (s *BFTSynchronizer) Buffer() *SyncBuffer {
 
 // MaliciousSynchronize 恶意的同步
 func (s *BFTSynchronizer) MaliciousSynchronize() error {
-	fmt.Printf("leader id = %d", bft_related.ConsensusController.GetLeaderID())
-
 	// === We probe all the endpoints and establish a target height, as well as detect the self endpoint.
 	targetHeight, myEndpoint, err := s.detectTargetHeight()
 	if err != nil {
@@ -126,24 +150,22 @@ func (s *BFTSynchronizer) MaliciousSynchronize() error {
 	// === Create the BFT block deliverer and start a go-routine that fetches block and inserts them into the syncBuffer.
 	// 创建 BFT block deliver 并且启动一个 goroutine 来将获取到的 blocks 放到  syncBuffer 之中
 	// 假设在 startHeight 处每次填写0的话, 然后每次向主节点进行区块同步
-	//fmt.Println("zhf add code: createBFTDeliverer")
 	bftDeliverer, err := s.createBFTDeliverer(falsifiedHeight, myEndpoint)
 	if err != nil {
 		return errors.Wrapf(err, "cannot create BFT block deliverer")
 	}
 
+	// 开启线程不断地进行区块的拉取
 	go bftDeliverer.MaliciousDeliverBlocks(falsifiedHeight)
 	defer bftDeliverer.Stop()
 
 	// === Loop on sync-buffer and pull blocks, writing them to the ledger, returning the last block pulled.
+	// 将拉取到的 block 进行判断, 直到达到指定的高度
 	_, err = s.MaliciousGetBlocksFromSyncBuffer(falsifiedHeight, targetHeight)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get any blocks from SyncBuffer")
 	}
 
-	// 拿到最后一个同步过来的区块
-	// decision := s.BlockToDecision(lastPulledBlock)
-	// s.Logger.Infof("Returning decision from block [%d], decision: %+v", lastPulledBlock.GetHeader().GetNumber(), decision)
 	return nil
 }
 

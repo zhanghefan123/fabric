@@ -49,7 +49,11 @@ func (*Node) Sync() bft.SyncResponse {
 	panic("implement me")
 }
 
-func (*Node) MaliciousSync() error {
+func (*Node) StartMaliciousSync() error {
+	panic("implement me")
+}
+
+func (*Node) StopMaliciousSync() error {
 	panic("implement me")
 }
 

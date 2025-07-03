@@ -68,7 +68,11 @@ func (s *Synchronizer) Sync() types.SyncResponse {
 	}
 }
 
-func (s *Synchronizer) MaliciousSync() error {
+func (s *Synchronizer) StartMaliciousSync() error {
+	panic("implement me")
+}
+
+func (s *Synchronizer) StopMaliciousSync() error {
 	panic("implement me")
 }
 

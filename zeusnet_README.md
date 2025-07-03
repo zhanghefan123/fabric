@@ -479,3 +479,42 @@ func (s *server) Deliver(srv ab.AtomicBroadcast_DeliverServer) error {
 }
 
 ```
+
+
+```response 这是读取发送的 seekInfo 进行处理的函数
+// Handle receives incoming deliver requests.
+func (h *Handler) Handle(ctx context.Context, srv *Server) error {
+	addr := util.ExtractRemoteAddress(ctx)
+	logger.Debugf("Starting new deliver loop for %s", addr)
+	h.Metrics.StreamsOpened.Add(1)
+	defer h.Metrics.StreamsClosed.Add(1)
+	for {
+		logger.Debugf("Attempting to read seek info message from %s", addr)
+		envelope, err := srv.Recv()
+		if err == io.EOF {
+			logger.Debugf("Received EOF from %s, hangup", addr)
+			return nil
+		}
+		if err != nil {
+			logger.Warningf("Error reading from %s: %s", addr, err)
+			return err
+		}
+
+		status, err := h.deliverBlocks(ctx, srv, envelope)
+		if err != nil {
+			return err
+		}
+
+		err = srv.SendStatusResponse(status)
+		if status != cb.Status_SUCCESS {
+			return err
+		}
+		if err != nil {
+			logger.Warningf("Error sending to %s: %s", addr, err)
+			return err
+		}
+
+		logger.Debugf("Waiting for new SeekInfo from %s", addr)
+	}
+}
+```
