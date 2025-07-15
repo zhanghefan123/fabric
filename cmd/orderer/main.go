@@ -18,7 +18,7 @@ import (
 func main() {
 	// zeusnet add code
 	// --------------------------------------------------------
-	err := zeusnet.Start()
+	err := zeusnet.Start(true)
 	if err != nil {
 		fmt.Printf("error start frr %v", err)
 		return

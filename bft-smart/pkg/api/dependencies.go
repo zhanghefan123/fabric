@@ -103,6 +103,7 @@ type Synchronizer interface {
 	Sync() bft.SyncResponse
 	StartMaliciousSync() error
 	StopMaliciousSync() error
+	GetBlockHeight() int
 }
 
 // Logger defines the contract for logging.

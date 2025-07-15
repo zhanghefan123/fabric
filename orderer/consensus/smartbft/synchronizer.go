@@ -36,6 +36,10 @@ type Synchronizer struct {
 	Logger             *flogging.FabricLogger
 }
 
+func (s *Synchronizer) GetBlockHeight() int {
+	panic("implement me")
+}
+
 // Sync synchronizes blocks and returns the response
 func (s *Synchronizer) Sync() types.SyncResponse {
 	s.Logger.Debug("Simple Sync initiated")

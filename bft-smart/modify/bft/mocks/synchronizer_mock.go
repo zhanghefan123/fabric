@@ -12,6 +12,10 @@ type SynchronizerMock struct {
 	mock.Mock
 }
 
+func (_m* SynchronizerMock) GetBlockHeight() int {
+	panic("not implemented")
+}
+
 // Sync provides a mock function with given fields:
 func (_m *SynchronizerMock) Sync() types.SyncResponse {
 	ret := _m.Called()

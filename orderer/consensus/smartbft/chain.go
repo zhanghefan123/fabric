@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"github.com/hyperledger/fabric/zeusnet/bft_related"
 	"github.com/hyperledger/fabric/zeusnet/modules/config"
-	"github.com/hyperledger/fabric/zeusnet/modules/info"
 	"github.com/hyperledger/fabric/zeusnet/tools/file"
 	"path/filepath"
 	"reflect"
@@ -89,9 +88,6 @@ type BFTChain struct {
 	statusReportMutex sync.Mutex
 	consensusRelation types2.ConsensusRelation
 	status            types2.Status
-
-	// zhf add code
-	StopRecordChan chan struct{} // 停止记录的信道
 }
 
 // NewChain creates new BFT Smart chain
@@ -145,8 +141,6 @@ func NewChain(
 		MetricsBFT:    metricsBFT.With("channel", support.ChannelID()),
 		MetricsWalBFT: metricsWalBFT.With("channel", support.ChannelID()),
 		bccsp:         bccsp,
-
-		StopRecordChan: make(chan struct{}, 1),
 	}
 
 	lastBlock := LastBlockFromLedgerOrPanic(support, c.Logger)
@@ -462,30 +456,6 @@ func (c *BFTChain) Errored() <-chan struct{} {
 	return nil
 }
 
-// StartRecordHeight zhf add code 记录区块高度
-func (c *BFTChain) StartRecordHeight() {
-	go func() {
-	Loop:
-		for {
-			select {
-			case <-c.StopRecordChan:
-				break Loop
-			default:
-				err := info.WriteBlockHeight(c.support.Height())
-				if err != nil {
-					fmt.Printf("write block height periodically error: %v", err)
-					break Loop
-				}
-				time.Sleep(time.Second)
-			}
-		}
-	}()
-}
-
-func (c *BFTChain) StopRecordHeight() {
-	c.StopRecordChan <- struct{}{}
-}
-
 // Start should allocate whatever resources are needed for staying up to date with the chain.
 // Typically, this involves creating a thread which reads from the ordering source, passes those
 // messages to a block cutter, and writes the resulting blocks to the ledger.
@@ -497,10 +467,6 @@ func (c *BFTChain) Start() {
 		c.Logger.Panicf("Failed to write node id to file: %v", err)
 	}
 	// --------------------------------------------------
-	// zhf add code
-	// -----------------------------------------------------------------------
-	c.StartRecordHeight()
-	// -----------------------------------------------------------------------
 
 	if err = c.consensus.Start(config.EnvLoaderInstance.EnableRoutine); err != nil {
 		c.Logger.Panicf("Failed to start chain, aborting: %+v", err)
@@ -509,7 +475,9 @@ func (c *BFTChain) Start() {
 
 	// zhf add code
 	// 为全局变量设置上 controller
+	// --------------------------------------------------
 	bft_related.ConsensusController = c.consensus.GetController()
+	// --------------------------------------------------
 }
 
 // WriteCurrentNodeId writes the current node id to the configuration/nodeId.txt.
@@ -531,7 +499,6 @@ func (c *BFTChain) WriteCurrentNodeId() error {
 func (c *BFTChain) Halt() {
 	c.Logger.Infof("Shutting down chain")
 	c.consensus.Stop()
-	c.StopRecordHeight() // zhf add code
 }
 
 func (c *BFTChain) blockToProposalWithoutSignaturesInMetadata(block *cb.Block) types.Proposal {

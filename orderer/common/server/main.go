@@ -310,9 +310,10 @@ func Main() {
 		logger.Fatalf("Atomic Broadcast gRPC server has terminated while serving requests due to: %v", err)
 	}
 
-	for {
-		time.Sleep(time.Second)
-	}
+	// 这里是不是不需要永久进行阻塞
+	//for {
+	//	time.Sleep(time.Second)
+	//}
 }
 
 // Searches whether there is a join block for a system channel, and if there is, panic.

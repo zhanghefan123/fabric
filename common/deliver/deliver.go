@@ -10,10 +10,8 @@ package deliver
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math"
-	"runtime/debug"
 	"strconv"
 	"time"
 
@@ -201,8 +199,8 @@ func isFiltered(srv *Server) bool {
 
 // deliverBlocks 向请求方不断的进行 blocks 的发送
 func (h *Handler) deliverBlocks(ctx context.Context, srv *Server, envelope *cb.Envelope) (status cb.Status, err error) {
-	fmt.Println("zhf add code: deliver blocks")
-	debug.PrintStack()
+	//fmt.Println("zhf add code: deliver blocks")
+	//debug.PrintStack()
 
 	addr := util.ExtractRemoteAddress(ctx)
 	payload, chdr, shdr, err := h.parseEnvelope(ctx, envelope)

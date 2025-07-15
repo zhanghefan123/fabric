@@ -87,7 +87,7 @@ func newSynchronizer(
 			VerifierFactory:            &verifierCreator{},
 			BFTDelivererFactory:        &bftDelivererCreator{},
 			Logger:                     logger,
-			StopMaliciousAttackChannel: make(chan struct{}), // zhf add code
+			StopMaliciousAttackChannel: make(chan struct{}, 1), // zhf add code
 		}
 	case "simple":
 		logger.Debug("Creating simple Synchronizer")

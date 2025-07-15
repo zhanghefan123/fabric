@@ -45,6 +45,10 @@ type Node struct {
 	consensus   *smartbft.Consensus
 }
 
+func (*Node) GetBlockHeight() int {
+	panic("not implemented")
+}
+
 func (*Node) Sync() bft.SyncResponse {
 	panic("implement me")
 }

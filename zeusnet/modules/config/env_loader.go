@@ -22,11 +22,15 @@ type EnvLoader struct {
 	WebServerListenPort          int
 	EnableRoutine                bool
 	EnableAdvancedMessageHandler bool
+	EnablePprof                  bool
 	IdToAddressMapping           map[uint64]string
+	IsOrderer                    bool
+	PProfOrdererListenPort       int
+	PProfPeerListenPort          int
 }
 
 // LoadEnv 进行环境变量的加载
-func (envLoader *EnvLoader) LoadEnv() error {
+func (envLoader *EnvLoader) LoadEnv(isOrderer bool) error {
 	envLoader.EnableFrr = os.Getenv("ENABLE_FRR")
 	envLoader.ContainerName = os.Getenv("CONTAINER_NAME")
 	envLoader.FirstInterfaceName = os.Getenv("FIRST_INTERFACE_NAME")
@@ -37,14 +41,39 @@ func (envLoader *EnvLoader) LoadEnv() error {
 	}
 	envLoader.WebServerListenPort = int(webServerListenPort)
 	envLoader.EnableRoutine, err = strconv.ParseBool(os.Getenv("ENABLE_ROUTINE"))
-	envLoader.EnableAdvancedMessageHandler, err = strconv.ParseBool(os.Getenv("ENABLE_ADVANCED_MESSAGE_HANDLER"))
 	if err != nil {
 		return fmt.Errorf("parse ENABLE_ROUTINE error %v", err)
+	}
+	envLoader.EnableAdvancedMessageHandler, err = strconv.ParseBool(os.Getenv("ENABLE_ADVANCED_MESSAGE_HANDLER"))
+	if err != nil {
+		return fmt.Errorf("parse ENABLE_ADVANCED_MESSAGE_HANDLER error %v", err)
+	}
+	envLoader.EnablePprof, err = strconv.ParseBool(os.Getenv("ENABLE_PPROF"))
+	if err != nil {
+		return fmt.Errorf("parse ENABLE_PPROF error %v", err)
 	}
 	err = envLoader.ReadIdToAddressMapping()
 	if err != nil {
 		return fmt.Errorf("read id to address mapping failed %v", err)
 	}
+	if isOrderer {
+		envLoader.IsOrderer = true
+		var pprofOrdererListenPort int64
+		pprofOrdererListenPort, err = strconv.ParseInt(os.Getenv("PPROF_ORDERER_LISTEN_PORT"), 10, 64)
+		if err != nil {
+			return fmt.Errorf("parse PPROF_ORDERER_LISTEN_PORT error: %v", err)
+		}
+		envLoader.PProfOrdererListenPort = int(pprofOrdererListenPort)
+	} else {
+		envLoader.IsOrderer = false
+		var pprofPeerListenPort int64
+		pprofPeerListenPort, err = strconv.ParseInt(os.Getenv("PPROF_PEER_LISTEN_PORT"), 10, 64)
+		if err != nil {
+			return fmt.Errorf("parse PPROF_ORDERER_LISTEN_PORT error: %v", err)
+		}
+		envLoader.PProfPeerListenPort = int(pprofPeerListenPort)
+	}
+
 	return nil
 }
 

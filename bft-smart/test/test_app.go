@@ -72,6 +72,10 @@ type lastRecord struct {
 	signatures []types.Signature
 }
 
+func (a *App) GetBlockHeight() int {
+	panic("not implemented")
+}
+
 // Mute mutes the log
 func (a *App) Mute() {
 	a.logLevel.SetLevel(zapcore.PanicLevel)

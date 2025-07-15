@@ -67,6 +67,10 @@ type Consensus struct {
 	running      uint64
 }
 
+func (c *Consensus) GetBlockHeight() int {
+	return c.Synchronizer.GetBlockHeight()
+}
+
 // GetController zhf add code controller 不暴露, 通过这种方式暴露
 func (c *Consensus) GetController() *algorithm.Controller {
 	return c.controller

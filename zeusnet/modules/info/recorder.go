@@ -3,30 +3,38 @@ package info
 import (
 	"fmt"
 	"github.com/hyperledger/fabric/zeusnet/modules/config"
+	"io/ioutil"
 	"os"
 )
 
-func WriteBlockHeight(height uint64) (err error) {
-	// 文件 handle 和 错误
-	var file *os.File
-	filePath := fmt.Sprintf("/configuration/%s/block_height.stat", config.EnvLoaderInstance.ContainerName)
-	// 为文件 handle 赋值
-	file, err = os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0666)
-	defer func() {
-		if err == nil {
-			err = file.Close()
-		}
-	}()
-	// 如果出现错误就进行返回
+type Information struct {
+	BlockHeight          int
+	ConnectedTcpCount    int
+	HalfConnetedTcpCount int
+	TimeoutCount         int
+	BusMessageCount      int
+}
+
+func WriteInformation(information *Information) error {
+	// 路径
+	filePath := fmt.Sprintf("/configuration/%s/information.stat", config.EnvLoaderInstance.ContainerName)
+	// 进行结果的写入
+	result := fmt.Sprintf("%d,%d,%d,%d,%d",
+		information.BlockHeight,
+		information.ConnectedTcpCount,
+		information.HalfConnetedTcpCount,
+		information.TimeoutCount,
+		information.BusMessageCount)
+	// 构建临时文件
+	tmpFilename := filePath + ".tmp"
+	err := ioutil.WriteFile(tmpFilename, []byte(result), 0644)
 	if err != nil {
-		fmt.Printf("open block_height.stat err: %v", err)
-		return
+		return fmt.Errorf("write tmp file error: %v", err)
 	}
-	// 只进行自己的结果的写入
-	result := fmt.Sprintf("%d", height) // BFTSynchronizer.support.Height
-	_, err = file.WriteString(result)
+	// 进行文件重命名
+	err = os.Rename(tmpFilename, filePath)
 	if err != nil {
-		fmt.Printf("write peers_height.stat err: %v", err)
+		return fmt.Errorf("rename tmp file error: %v", err)
 	}
 	return nil
 }

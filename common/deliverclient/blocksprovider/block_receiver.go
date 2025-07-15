@@ -100,6 +100,7 @@ RecvLoop: // Loop until the endpoint is refreshed, or there is an error on the c
 			err = &errRefreshEndpoint{message: fmt.Sprintf("orderer endpoint `%s` has been refreshed, ", br.endpoint.Address)}
 			break RecvLoop
 		case response, ok := <-br.recvC:
+			fmt.Println("MaliciousProcessIncoming")
 			if !ok {
 				br.logger.Warningf("Orderer hung up without sending status")
 				err = errors.Errorf("orderer `%s` hung up without sending status", br.endpoint.Address)

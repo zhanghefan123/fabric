@@ -17,6 +17,10 @@ type Synchronizer_Expecter struct {
 	mock *mock.Mock
 }
 
+func (_m* Synchronizer) GetBlockHeight() int {
+	panic("implement me");
+}
+
 func (_m *Synchronizer) EXPECT() *Synchronizer_Expecter {
 	return &Synchronizer_Expecter{mock: &_m.Mock}
 }

@@ -233,6 +233,8 @@ $(BUILD_DIR)/bin/%: GO_LDFLAGS = $(METADATA_VAR:%=-X $(PKGNAME)/common/metadata.
 $(BUILD_DIR)/bin/%:
 	@echo "Building $@"
 	@mkdir -p $(@D)
+	cd bft-smart && go mod tidy
+	go mod download github.com/mohae/deepcopy
 	GOBIN=$(abspath $(@D)) go install -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" -buildvcs=false $(pkgmap.$(@F))
 	@touch $@
 

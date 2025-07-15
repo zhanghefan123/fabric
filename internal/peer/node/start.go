@@ -125,7 +125,7 @@ var nodeStartCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// zeusnet add code 进行自己的代码的添加
 		// --------------------------------------------------------
-		err := zeusnet.Start()
+		err := zeusnet.Start(false)
 		if err != nil {
 			return fmt.Errorf("error starting frr: %s", err)
 		}

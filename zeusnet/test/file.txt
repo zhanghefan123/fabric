@@ -1,0 +1,13 @@
+tcp        0      0 192.168.0.1:34404       192.168.0.5:7052        ESTABLISHED 1/orderer
+tcp        0      0 192.168.0.1:48144       192.168.0.45:7056       ESTABLISHED 1/orderer
+tcp        0      0 192.168.0.1:51910       192.168.0.25:7053       ESTABLISHED 1/orderer
+tcp        0      0 192.168.0.1:44294       192.168.0.18:7054       ESTABLISHED 1/orderer
+tcp        0      0 192.168.0.1:35016       192.168.0.41:7055       ESTABLISHED 1/orderer
+tcp        0      0 172.17.0.10:38714       172.17.0.10:7051        ESTABLISHED 1/orderer
+tcp6       0      0 192.168.0.1:7051        192.168.0.18:43470      ESTABLISHED 1/orderer
+tcp6       0      0 192.168.0.1:7051        192.168.0.41:47282      ESTABLISHED 1/orderer
+tcp6       0      0 192.168.0.1:7051        192.168.0.45:46726      ESTABLISHED 1/orderer
+tcp6       0      0 192.168.0.1:7051        192.168.0.5:44308       ESTABLISHED 1/orderer
+tcp6       0      0 192.168.0.1:7051        192.168.0.37:40754      ESTABLISHED 1/orderer
+tcp6       0      0 172.17.0.10:7051        172.17.0.10:38714       ESTABLISHED 1/orderer
+tcp6       0      0 192.168.0.1:7051        192.168.0.25:46052      ESTABLISHED 1/orderer

@@ -11,7 +11,6 @@ import (
 	"github.com/hyperledger/fabric/protoutil"
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/hyperledger-labs/SmartBFT/pkg/types"
@@ -45,6 +44,39 @@ type BFTSynchronizer struct {
 
 	mutex    sync.Mutex
 	syncBuff *SyncBuffer
+}
+
+func (s *BFTSynchronizer) GetBlockHeight() int {
+	return int(s.Support.Height())
+}
+
+// DeepCopy zhf add code 深拷贝
+func (s *BFTSynchronizer) DeepCopy() *BFTSynchronizer {
+	if s == nil {
+		return nil
+	}
+
+	// 创建新的结构体
+	copySynchronizer := &BFTSynchronizer{
+		lastReconfig:               s.lastReconfig,
+		selfID:                     s.selfID,
+		LatestConfig:               s.LatestConfig,
+		BlockToDecision:            s.BlockToDecision,
+		OnCommit:                   s.OnCommit,
+		Support:                    s.Support,
+		CryptoProvider:             s.CryptoProvider,
+		ClusterDialer:              s.ClusterDialer,
+		LocalConfigCluster:         s.LocalConfigCluster,
+		BlockPullerFactory:         s.BlockPullerFactory,
+		VerifierFactory:            s.VerifierFactory,
+		BFTDelivererFactory:        s.BFTDelivererFactory,
+		Logger:                     s.Logger,
+		StopMaliciousAttackChannel: make(chan struct{}, 1), // 通道需要新建，不能直接复制
+		mutex:                      sync.Mutex{},
+		syncBuff:                   nil,
+	}
+
+	return copySynchronizer
 }
 
 func (s *BFTSynchronizer) Sync() types.SyncResponse {
@@ -82,26 +114,43 @@ func (s *BFTSynchronizer) Sync() types.SyncResponse {
 
 // StartMaliciousSync MaliciousSync zhf add code 向主节点进行恶意的区块同步拉取
 func (s *BFTSynchronizer) StartMaliciousSync() error {
-	s.Logger.Debug("BFT Sync initiated")
-	// 同步攻击入口
 	go func() {
-		var counter int32 = 0
+		//Loop:
+		//for {
+		//	select {
+		//	case <-s.StopMaliciousAttackChannel:
+		//		fmt.Println("break loop")
+		//		break Loop
+		//	default:
+		//		err := s.MaliciousSynchronize()
+		//		if err != nil {
+		//			fmt.Printf("Malicious Synchronize error due to %v", err)
+		//			break Loop
+		//		}
+		//	}
+		//}
+
+		semaphore := make(chan struct{}, 20) // 限制最多 20 个 goroutine
 	Loop:
 		for {
 			select {
 			case <-s.StopMaliciousAttackChannel:
+				fmt.Println("break loop")
 				break Loop
 			default:
-				if atomic.LoadInt32(&counter) < 10 {
+				select {
+				case semaphore <- struct{}{}: // 获取令牌
+					copiedSynchronizer := s.DeepCopy()
 					go func() {
-						atomic.AddInt32(&counter, 1)
-						defer atomic.AddInt32(&counter, -1)
-						err := s.MaliciousSynchronize()
+						defer func() { <-semaphore }() // 释放令牌
+						err := copiedSynchronizer.MaliciousSynchronize()
 						if err != nil {
 							fmt.Printf("Malicious Synchronize error due to %v", err)
 						}
 					}()
-				} else {
+					fmt.Printf("current thread count %d\n", len(semaphore))
+				default:
+					fmt.Printf("current thread count %d (waiting)\n", len(semaphore))
 					continue
 				}
 			}
@@ -111,6 +160,7 @@ func (s *BFTSynchronizer) StartMaliciousSync() error {
 }
 
 func (s *BFTSynchronizer) StopMaliciousSync() error {
+	// 如果为1, 那么直接返回null, 不进行插入
 	if len(s.StopMaliciousAttackChannel) == 0 {
 		s.StopMaliciousAttackChannel <- struct{}{}
 	}
@@ -135,6 +185,7 @@ func (s *BFTSynchronizer) MaliciousSynchronize() error {
 
 	// 获取当前的高度
 	var falsifiedHeight uint64 = 2
+	targetHeight = 100
 
 	// === Create a buffer to accept the blocks delivered from the BFTDeliverer.
 	// 计算能够存储的最大的能够缓存的区块的数量

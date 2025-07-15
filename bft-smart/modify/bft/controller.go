@@ -8,6 +8,8 @@ package bft
 import (
 	"fmt"
 	"github.com/hyperledger/fabric/zeusnet/modules/config"
+	"github.com/hyperledger/fabric/zeusnet/modules/info"
+	"github.com/hyperledger/fabric/zeusnet/modules/network"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -160,8 +162,8 @@ type Controller struct {
 	senderMessagePerSecond map[uint64]*float64 // zhf add code 记录从每个 sender 发送过来的消息, 每秒有多少个
 	senderMessageCount     map[uint64]*uint64  // zhf add code 记录从每个 sender 自从 lastRecordTime 发送过来的消息
 	lastRecordTime         time.Time           // zhf add code 记录上一次统计的时间
-	abortChannel           chan struct{}       // zhf add code 停止的信道
-	abortHandleChannel     chan struct{}       // zhf add code 停止的信道
+	TimeoutCount           int                 // zhf add code Timeout 次数记录
+	BusMessageCount        int                 // zhf add code 总线消息数量记录
 	// -----------------------------------------
 
 }
@@ -340,6 +342,9 @@ func (c *Controller) OnRequestTimeout(request []byte, info types.RequestInfo) {
 		return
 	}
 
+	// zhf add code
+	c.TimeoutCount += 1
+
 	c.Logger.Infof("Request %s timeout expired, forwarding request to leader: %d", info, leaderID)
 	c.Comm.SendTransaction(leaderID, request)
 }
@@ -419,7 +424,7 @@ func (c *Controller) StartHandleMessageFromQueues() {
 Loop:
 	for {
 		select {
-		case <-c.abortHandleChannel:
+		case <-c.stopChan:
 			break Loop
 		default:
 			for index, msgQueue := range c.indexToMsgQueue {
@@ -442,11 +447,6 @@ Loop:
 	}
 }
 
-// StopHandleMessageFromQueues zhf add code 停止进行消息的处理
-func (c *Controller) StopHandleMessageFromQueues() {
-	c.abortHandleChannel <- struct{}{}
-}
-
 func (c *Controller) AdvancedProcessMessages(sender uint64, m *protos.Message) {
 	c.Logger.Debugf("%d got message from %d: %s", c.ID, sender, MsgToString(m))
 	// zhf add code 进行实时的消息的记录
@@ -460,6 +460,73 @@ func (c *Controller) AdvancedProcessMessages(sender uint64, m *protos.Message) {
 		c.validatorToMsgQueue[sender] <- m
 	}
 	// -------------------------
+}
+
+// StartRecordMessageCount  zhf add code 开始更新消息总线数量
+func (c *Controller) StartRecordMessageCount() {
+Loop:
+	for {
+		select {
+		case <-c.stopChan:
+			break Loop
+		default:
+			// 记录当前的消息总数
+			totalSize := 0
+			for _, messageQueue := range c.validatorToMsgQueue {
+				totalSize += len(messageQueue)
+			}
+			c.BusMessageCount = totalSize
+			// 1秒记录一次
+			time.Sleep(time.Second)
+		}
+	}
+}
+
+// StartRecordInformation zhf add code 开始记录信息
+func (c *Controller) StartRecordInformation() {
+Loop:
+	for {
+		select {
+		case <-c.stopChan:
+			break Loop
+		default:
+			blockHeight := 0
+			// 1. 获取高度
+			// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+			blockHeight = c.Synchronizer.GetBlockHeight()
+			// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+			// 2. 获取超时次数/消息总线中消息数量
+			// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+			timeoutCount := c.TimeoutCount
+			busMessageCount := c.BusMessageCount
+			// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+			// 3. 获取 tcp 连接数和半连接数量
+			connectedConnectionCount, err := network.GetConnectedTcpConnectionCount()
+			if err != nil {
+				fmt.Printf("get connected connection count err: %v", err)
+			}
+			halfConnectedConnectionCount, err := network.GetHalfConnectedTcpConnectionCount()
+			if err != nil {
+				fmt.Printf("get half connected connection count err: %v", err)
+			}
+			// 4. 记录信息
+			// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+			information := &info.Information{
+				BlockHeight:          blockHeight,
+				ConnectedTcpCount:    connectedConnectionCount,
+				HalfConnetedTcpCount: halfConnectedConnectionCount,
+				TimeoutCount:         timeoutCount,
+				BusMessageCount:      busMessageCount,
+			}
+			err = info.WriteInformation(information)
+			if err != nil {
+				fmt.Printf("write information error: %v", err)
+			}
+			// ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+			time.Sleep(time.Second)
+		}
+	}
 }
 
 func (c *Controller) OriginalProcessMessages(sender uint64, m *protos.Message) {
@@ -509,7 +576,7 @@ func (c *Controller) StartPrintMessageReceiveSpeedPeriodically() {
 Loop:
 	for {
 		select {
-		case <-c.abortChannel:
+		case <-c.stopChan:
 			break Loop
 		default:
 			var speedAndSenderList []SpeedAndSender
@@ -551,11 +618,6 @@ Loop:
 			}
 		}
 	}
-}
-
-// StopPrintMessageReceiveSpeedPeriodically zhf add code 停止周期性记录
-func (c *Controller) StopPrintMessageReceiveSpeedPeriodically() {
-	c.abortChannel <- struct{}{}
 }
 
 // RecordMessageSender zhf add code 进行消息的记录
@@ -1056,8 +1118,8 @@ func (c *Controller) Start(startViewNumber uint64, startProposalSequence uint64,
 	c.indexToMsgQueue = make(map[int]chan *protos.Message)
 	c.indexToSenderMapping = make(map[int]uint64)
 	c.blackList = make(map[uint64]struct{})
-	c.abortChannel = make(chan struct{})
-	c.abortHandleChannel = make(chan struct{})
+	c.TimeoutCount = 0
+	c.BusMessageCount = 0
 	c.nextIndex = 0
 
 	index := 0
@@ -1080,6 +1142,8 @@ func (c *Controller) Start(startViewNumber uint64, startProposalSequence uint64,
 	go c.StartPrintMessageReceiveSpeedPeriodically()
 	if config.EnvLoaderInstance.EnableAdvancedMessageHandler {
 		go c.StartHandleMessageFromQueues()
+		go c.StartRecordMessageCount()
+		go c.StartRecordInformation()
 	}
 	// ---------------------------------------------
 
@@ -1106,13 +1170,10 @@ func (c *Controller) close() {
 
 // Stop the controller
 func (c *Controller) Stop() {
-	c.close()
+	c.close() // close 之后 channel 之中就能够读出东西来了
 	c.Batcher.Close()
 	c.RequestPool.Close()
 	c.LeaderMonitor.Close()
-	// zhf add code
-	c.StopPrintMessageReceiveSpeedPeriodically()
-	c.StopHandleMessageFromQueues()
 
 	// Drain the leader token if we hold it.
 	select {

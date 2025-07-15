@@ -154,7 +154,9 @@ func (pw *pickerWrapper) pick(ctx context.Context, failfast bool, info balancer.
 
 		pickResult, err := p.Pick(info)
 		if err != nil {
+			// 如果 pick 的结果是 balancer.ErrNoSubConnAvailable 那么需要进行返回
 			if err == balancer.ErrNoSubConnAvailable {
+				fmt.Println("zhf add code: ErrNoSubConnAvailable")
 				continue
 			}
 			if st, ok := status.FromError(err); ok {
